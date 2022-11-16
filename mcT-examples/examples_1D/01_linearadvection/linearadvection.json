@@ -1,7 +1,7 @@
 {
     "general": {
         "case_name": "linearadvection",
-        "save_path": "./results",
+        "save_path": "./data",
         "end_time": 2.0,
         "save_dt": 1.0
     },

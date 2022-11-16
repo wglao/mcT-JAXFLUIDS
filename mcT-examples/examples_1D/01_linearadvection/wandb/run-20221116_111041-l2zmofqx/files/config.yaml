@@ -1,0 +1,48 @@
+wandb_version: 1
+
+_wandb:
+  desc: null
+  value:
+    cli_version: 0.13.5
+    is_jupyter_run: false
+    is_kaggle_kernel: false
+    python_version: 3.10.6
+    start_time: 1668618641.942277
+    t:
+      1:
+      - 12
+      - 55
+      2:
+      - 12
+      - 55
+      3:
+      - 19
+      - 23
+      4: 3.10.6
+      5: 0.13.5
+      8:
+      - 5
+batch_size:
+  desc: null
+  value: 40
+layer:
+  desc: null
+  value: 1
+learning_rate:
+  desc: null
+  value: 0.0001
+mc_alpha:
+  desc: null
+  value: 100000.0
+method:
+  desc: null
+  value: Dense_net
+n_seq:
+  desc: null
+  value: 1
+num_epochs:
+  desc: null
+  value: 30000
+problem:
+  desc: null
+  value: linearadvection

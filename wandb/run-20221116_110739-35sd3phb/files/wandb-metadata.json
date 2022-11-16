@@ -1,0 +1,125 @@
+{
+    "os": "Linux-5.15.0-52-generic-x86_64-with-glibc2.35",
+    "python": "3.10.6",
+    "heartbeatAt": "2022-11-16T17:07:40.317018",
+    "startedAt": "2022-11-16T17:07:39.876289",
+    "docker": null,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "/home/wglao/Documents/PHO-ICES/JAXFLUIDS/mcT-examples/examples_1D/01_linearadvection/mcT_advection.py",
+    "codePath": "mcT-examples/examples_1D/01_linearadvection/mcT_advection.py",
+    "git": {
+        "remote": "https://github.com/tumaer/JAXFLUIDS.git",
+        "commit": "cdef954d30ad481f5572de54f670f827bb9a739a"
+    },
+    "email": "wesleygarlao@gmail.com",
+    "root": "/home/wglao/Documents/PHO-ICES/JAXFLUIDS",
+    "host": "wglao-pc",
+    "username": "wglao",
+    "executable": "/bin/python3",
+    "cpu_count": 8,
+    "cpu_count_logical": 16,
+    "cpu_freq": {
+        "current": 1407.2978125,
+        "min": 400.0,
+        "max": 4673.0
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 3652.734,
+            "min": 400.0,
+            "max": 4673.0
+        },
+        {
+            "current": 400.0,
+            "min": 400.0,
+            "max": 4673.0
+        },
+        {
+            "current": 400.0,
+            "min": 400.0,
+            "max": 4673.0
+        },
+        {
+            "current": 400.0,
+            "min": 400.0,
+            "max": 4673.0
+        },
+        {
+            "current": 400.0,
+            "min": 400.0,
+            "max": 4673.0
+        },
+        {
+            "current": 400.0,
+            "min": 400.0,
+            "max": 4673.0
+        },
+        {
+            "current": 400.0,
+            "min": 400.0,
+            "max": 4673.0
+        },
+        {
+            "current": 400.0,
+            "min": 400.0,
+            "max": 4673.0
+        },
+        {
+            "current": 3216.966,
+            "min": 400.0,
+            "max": 4673.0
+        },
+        {
+            "current": 400.0,
+            "min": 400.0,
+            "max": 4673.0
+        },
+        {
+            "current": 400.0,
+            "min": 400.0,
+            "max": 4673.0
+        },
+        {
+            "current": 400.0,
+            "min": 400.0,
+            "max": 4673.0
+        },
+        {
+            "current": 400.0,
+            "min": 400.0,
+            "max": 4673.0
+        },
+        {
+            "current": 400.0,
+            "min": 400.0,
+            "max": 4673.0
+        },
+        {
+            "current": 400.0,
+            "min": 400.0,
+            "max": 4673.0
+        },
+        {
+            "current": 4560.156,
+            "min": 400.0,
+            "max": 4673.0
+        }
+    ],
+    "disk": {
+        "total": 55.18458938598633,
+        "used": 30.483932495117188
+    },
+    "gpu": "NVIDIA GeForce RTX 3060",
+    "gpu_count": 1,
+    "gpu_devices": [
+        {
+            "name": "NVIDIA GeForce RTX 3060",
+            "memory_total": 12884901888
+        }
+    ],
+    "memory": {
+        "total": 15.472415924072266
+    }
+}
