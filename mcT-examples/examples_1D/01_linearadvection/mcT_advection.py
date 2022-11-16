@@ -17,6 +17,8 @@ from jax.example_libraries import stax, optimizers
 import time
 import pickle
 import h5py
+import re
+
 from jaxfluids import InputReader, Initializer, SimulationManager
 from jaxfluids.post_process import load_data, create_lineplot
 
@@ -25,38 +27,45 @@ from jaxfluids.post_process import load_data, create_lineplot
 
 #! Step : 0 - Generate_data_initilizers
 
-mc_alpha = 1e5
-
 # initialize physic parameters
 # initialize parameters
-import mcT_parameters
-from mcT_parameters import *
+import mcT_parameters as pars
 
 # ? Step 0.2 - Uploading wandb
 problem = 'linearadvection'
-filename = problem + '_seq_n_mc_' + str(n_seq_mc) +'_forward_mc_train_d' + str(num_train) + '_alpha_' + str(mc_alpha) + '_lr_' + str(learning_rate) + '_batch_' + str(batch_size) + '_nseq_' + str(n_seq) + '_layer_' + str(layers) + 'neurons' + str(units) + '_epochs_' + str(num_epochs)
+filename = problem + '_seq_n_mc_' + str(pars.n_seq_mc) +'_forward_mc_train_d' + str(pars.num_train) + '_alpha_' + str(pars.mc_alpha) + '_lr_' + str(pars.learning_rate) + '_batch_' + str(pars.batch_size) + '_nseq_' + str(pars.n_seq) + '_layer_' + str(pars.layers) + 'neurons' + str(pars.units) + '_epochs_' + str(pars.num_epochs)
 
 wandb.init(project="mcT-JAXFluids")
 wandb.config.problem = problem
-wandb.config.mc_alpha = mc_alpha
-wandb.config.learning_rate = learning_rate
-wandb.config.num_epochs = num_epochs
-wandb.config.batch_size = batch_size
-wandb.config.n_seq = n_seq
-wandb.config.layer = layers
+wandb.config.mc_alpha = pars.mc_alpha
+wandb.config.learning_rate = pars.learning_rate
+wandb.config.num_epochs = pars.num_epochs
+wandb.config.batch_size = pars.batch_size
+wandb.config.n_seq = pars.n_seq
+wandb.config.layer = pars.layers
 wandb.config.method = 'Dense_net'
 
 #! Step 1: Loading data
-# run JAX-FLUIDS and load output
-import run_linearadvection as run
+# load h5 data and compile each time into an array
 
-dt = run.input_reader.save_dt
-dx = run.sim_manager.output_writer.cell_sizes[0]
+train_data = np.zeros(pars.num_train_samples, pars.nt_test_data+1, )
+train_path = 'data/train'
+train_files = os.listdir(train_path)
+
+for ii, file in enumerate(train_files):
+    f = h5py.File(train_path + file, 'r')
+    data = f['primes']['density'][()]
+    # data_time = re.findall(r'\d+.\d+',file)
+    train_data[ii,...] = data
+
+
+
+
 
 #! Step 2: Building up a neural network
 # Densely connected feed forward
-N = len(run.data_dict["density"][0,:,0,0])
-units = max(units, N)
+N = pars.N
+units = max(pars.units, N)
 forward_pass_int, _ = stax.serial(
     stax.Dense(units, W_init=normal(0.02), b_init=zeros), stax.Relu,
     stax.Dense(N, W_init=normal(0.02), b_init=zeros),
@@ -82,21 +91,23 @@ init_params = [W1, W2, b1, b2]
 
 print('=' * 20 + ' >> Success!')
 
-
+dt = pars.dt
+dx = pars.dx
+velo = pars.u
 #! Step 3: Forward solver (single time step)
 def single_solve_forward(un):
     # use different difference schemes for edge case
     lu = len(un)
-    u = un + (- dt / dx * (jnp.roll(un, -1) - jnp.roll(un, 1)) / 2 )
-    uleft = un[0] + (dt / dx / 2 * (3*un[0] - 4*un[1] + un[2]))
-    uright = un[lu-1] + (dt / -dx / 2 * (3*un[lu-1] - 4*un[lu-2] + un[lu-3]))
+    u = un + velo * (- dt / dx * (jnp.roll(un, -1) - jnp.roll(un, 1)) / 2 )
+    uleft = un[0] + velo * (dt / dx / 2 * (3*un[0] - 4*un[1] + un[2]))
+    uright = un[lu-1] + velo * (dt / -dx / 2 * (3*un[lu-1] - 4*un[lu-2] + un[lu-3]))
     u = u.at[0].set(uleft)
     u = u.at[lu-1].set(uright)
     return u
 
 #@jit
 def single_forward_pass(params, un):
-    u = un - facdt * dt * forward_pass(params, un)
+    u = un - pars.facdt * dt * forward_pass(params, un)
     return u.flatten()
 
 

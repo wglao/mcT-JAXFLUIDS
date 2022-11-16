@@ -24,6 +24,7 @@ num_test = 100
 n_seq = 1
 n_seq_mc = 1
 
+mc_alpha = 1e5
 learning_rate = 1e-4
 layers = 1
 batch_size = 40
@@ -34,16 +35,20 @@ num_epochs = int(3e4)
 
 nt_train_data = 100
 nt_test_data = 500
-dt = 1e-2
 facdt = 1
 
-T=2
-Nt=1000
+T = 2
+Nt = 1000
 dt = T / Nt
 nt_train_data = 200
 nt_test_data = 500
 N = 200
-dx = 1 / N
+x_max = 2
+dx = 2 / N
+
+u = 1
+v = 0
+w = 0
 
 n_plot = 3
 # Plot_Steps = [0, 50, 100, 200, 500]
