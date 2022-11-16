@@ -48,7 +48,7 @@ wandb.config.method = 'Dense_net'
 #! Step 1: Loading data
 # load h5 data and compile each time into an array
 
-train_data = np.zeros(pars.num_train_samples, pars.nt_test_data+1, )
+Train_data = np.zeros(pars.num_train_samples, pars.nt_test_data+1, )
 train_path = 'data/train'
 train_files = os.listdir(train_path)
 
@@ -56,11 +56,17 @@ for ii, file in enumerate(train_files):
     f = h5py.File(train_path + file, 'r')
     data = f['primes']['density'][()]
     # data_time = re.findall(r'\d+.\d+',file)
-    train_data[ii,...] = data
+    Train_data[ii,...] = data
 
+Test_data = np.zeros(pars.num_test_samples, pars.nt_test_data+1, )
+test_path = 'data/test'
+test_files = os.listdir(test_path)
 
-
-
+for ii, file in enumerate(test_files):
+    f = h5py.File(test_path + file, 'r')
+    data = f['primes']['density'][()]
+    # data_time = re.findall(r'\d+.\d+',file)
+    Test_data[ii,...] = data
 
 #! Step 2: Building up a neural network
 # Densely connected feed forward
@@ -158,10 +164,10 @@ def loss_one_sample_one_time(params, u):
     u_ml = single_forward_pass(params, u[0, :])
 
     # for the following steps up to sequential steps n_seq
-    loss_ml,loss_mc, u_ml, _, _ = lax.fori_loop(1, n_seq+1, squential_ml_second_phase, (loss_ml, loss_mc, u_ml, u, params))
+    loss_ml,loss_mc, u_ml, _, _ = lax.fori_loop(1, pars.n_seq+1, squential_ml_second_phase, (loss_ml, loss_mc, u_ml, u, params))
     loss_ml += MSE(u_ml, u[-1, :])
 
-    return loss_ml + mc_alpha * loss_mc
+    return loss_ml + pars.mc_alpha * loss_mc
 
 loss_one_sample_one_time_batch = vmap(loss_one_sample_one_time, in_axes=(None, 0), out_axes=0)
 
@@ -176,9 +182,9 @@ loss_one_sample_batch = vmap(loss_one_sample, in_axes=(None, 0), out_axes=0)
 # ? This step transform data to disired shape for training (n_train_samples, Nt, Nx) -> (n_train_samples, Nt, n_seq, Nx)
 #@jit
 def transform_one_sample_data(u_one_sample):
-    u_out = jnp.zeros((nt_train_data - n_seq - 1, n_seq+2, N))
-    for i in range(nt_train_data-n_seq-1):
-        u_out = u_out.at[i, :, :].set(u_one_sample[i:i + n_seq + 2, :])
+    u_out = jnp.zeros((pars.nt_train_data - pars.n_seq - 1, pars.n_seq + 2, N))
+    for i in range(pars.nt_train_data-pars.n_seq-1):
+        u_out = u_out.at[i, :, :].set(u_one_sample[i:i + pars.n_seq + 2, :])
     return u_out
 
 transform_one_sample_data_batch = vmap(transform_one_sample_data, in_axes=0)
@@ -194,10 +200,10 @@ def neural_solver(params, U_test):
 
     u = U_test[0, :]
 
-    U = jnp.zeros((nt_test_data + 1, N))
+    U = jnp.zeros((pars.nt_test_data + 1, N))
     U = U.at[0, :].set(u)
 
-    for i in range(1, nt_test_data + 1):
+    for i in range(1, pars.nt_test_data + 1):
         u = single_forward_pass(params, u)
         U = U.at[i, :].set(u)
 
@@ -214,14 +220,14 @@ def test_acc(params, Test_set):
 def body_fun(i, args):
     loss, opt_state, data = args
 
-    data_batch = lax.dynamic_slice_in_dim(data, i * batch_size, batch_size)
+    data_batch = lax.dynamic_slice_in_dim(data, i * pars.batch_size, pars.batch_size)
 
     loss, gradients = value_and_grad(LossmcDNN)(
         opt_get_params(opt_state), data_batch)
 
     opt_state = opt_update(i, gradients, opt_state)
 
-    return loss/batch_size, opt_state, data
+    return loss/pars.batch_size, opt_state, data
 
 
 @jit
@@ -250,20 +256,20 @@ def TrainModel(train_data, test_data, num_epochs, opt_state):
 
         if epoch % 1000 == 0:  # Print MSE every 1000 epochs
             print("Data_d {:d} n_seq {:d} batch {:d} time {:.2e}s loss {:.2e} TE {:.2e}  TE_min {:.2e} EPmin {:d} EP {} ".format(
-                num_train, n_seq, batch_size, t2 - t1, train_loss, test_accuracy, test_accuracy_min, epoch_min, epoch))
+                pars.num_train, pars.n_seq, pars.batch_size, t2 - t1, train_loss, test_accuracy, test_accuracy_min, epoch_min, epoch))
 
         wandb.log({"Train loss": float(train_loss), "Test Error": float(test_accuracy), 'TEST MIN': float(test_accuracy_min), 'Epoch' : float(epoch)})
 
     return optimal_opt_state, opt_state
 
 
-num_complete_batches, leftover = divmod(num_train, batch_size)
+num_complete_batches, leftover = divmod(pars.num_train, pars.batch_size)
 num_batches = num_complete_batches + bool(leftover)
 
-opt_int, opt_update, opt_get_params = optimizers.adam(learning_rate)
+opt_int, opt_update, opt_get_params = optimizers.adam(pars.learning_rate)
 opt_state = opt_int(init_params)
 
-best_opt_state, end_opt_state = TrainModel(Train_data, Test_data, num_epochs, opt_state)
+best_opt_state, end_opt_state = TrainModel(Train_data, Test_data, pars.num_epochs, opt_state)
 
 optimum_params = opt_get_params(best_opt_state)
 End_params = opt_get_params(end_opt_state)
@@ -290,15 +296,15 @@ def plot_compare(U_True, U_Pred, filename):
 
     # Compare solutions
     for i in range(5):
-        ut = jnp.reshape(U_True[Plot_Steps[i], :], (N, 1))
-        up = jnp.reshape(U_Pred[Plot_Steps[i], :], (N, 1))
+        ut = jnp.reshape(U_True[pars.Plot_Steps[i], :], (N, 1))
+        up = jnp.reshape(U_Pred[pars.Plot_Steps[i], :], (N, 1))
         ax = fig.add_subplot(1, 5, i+1)
         l1 = ax.plot(x, ut, '-', linewidth=2, label='True')
         l2 = ax.plot(x, up, '--', linewidth=2, label='Predicted')
         ax.set_aspect('auto', adjustable='box')
         ax.set_xticks([])
         ax.set_yticks([])
-        ax.set_title('t = ' + str(Plot_Steps[i]))
+        ax.set_title('t = ' + str(pars.Plot_Steps[i]))
 
         if i == 1:
             handles, labels = ax.get_legend_handles_labels()
