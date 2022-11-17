@@ -1,6 +1,7 @@
 __pycache__
 __pycache__/
 data/
+next_run.json
 results
 results/
 */jaxfluids.egg-info
