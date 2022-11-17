@@ -19,6 +19,7 @@ b_test = random.normal(pars.key_data_test_b, (pars.num_test_samples, 5))
 
 f = open('linearadvection.json', 'r+')
 setup = json.load(f)
+f.close()
 
 setup['general']['end_time'] = pars.T
 setup['general']['save_dt'] = pars.dt
@@ -43,7 +44,8 @@ for iii in range(pars.num_train_samples):
 
     f_new = open('next_run.json', 'w+')
     json.dump(setup, f_new, indent=4)
-
+    f_new.close()
+    
     # don't need sim return because data is not being plotted
     _, initializer, sim_manager = run.setup("next_run.json", "numerical_setup.json")
     _,_ = run.sim(initializer, sim_manager)
@@ -62,6 +64,7 @@ for iii in range(pars.num_test_samples):
 
     f_new = open('next_run.json', 'w+')
     json.dump(setup, f_new, indent=4)
+    f_new.close()
 
     # don't need sim return because data is not being plotted
     _, initializer, sim_manager = run.setup("next_run.json", "numerical_setup.json")
