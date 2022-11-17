@@ -1,4 +1,5 @@
 import json
+import os
 import mcT_parameters as pars
 import run_linearadvection as run
 from jax import random
@@ -66,3 +67,5 @@ for iii in range(pars.num_test_samples):
     _, initializer, sim_manager = run.setup("next_run.json", "numerical_setup.json")
     _,_ = run.sim(initializer, sim_manager)
 
+# clean up
+os.remove("next_run.json")
