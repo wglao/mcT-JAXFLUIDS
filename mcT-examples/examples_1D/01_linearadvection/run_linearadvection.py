@@ -29,11 +29,13 @@ def plot(cell_centers, times, data_dict):
 
     fig, ax = plt.subplots()
     ax.plot(cell_centers[0], data_dict["density"][-1,:,0,0])
+    # ax.plot(cell_centers[0], data_dict["density"][1,:,0,0], '--')
     ax.plot(cell_centers[0], data_dict["density"][0,:,0,0], color="black")
     plt.show()
 
 if __name__ == "__main__":
-    input_reader, initializer, sim_manager = setup("linearadvection.json", "numerical_setup.json")
+    # input_reader, initializer, sim_manager = setup("linearadvection.json", "numerical_setup.json")
+    input_reader, initializer, sim_manager = setup("next_run.json", "numerical_setup.json")
     buffer_dictionary, sim_manager = sim(initializer, sim_manager)
     cell_centers, cell_sizes, times, data_dict = load(sim_manager)
     plot(cell_centers, times, data_dict)

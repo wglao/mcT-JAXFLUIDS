@@ -1,9 +1,9 @@
 {
     "general": {
         "case_name": "linearadvection",
-        "save_path": "./results",
+        "save_path": "./data/train",
         "end_time": 2.0,
-        "save_dt": 1.0
+        "save_dt": 0.002
     },
     "domain": {
         "x": {
@@ -15,11 +15,17 @@
         },
         "y": {
             "cells": 1,
-            "range": [0.0, 1.0]
+            "range": [
+                0.0,
+                1.0
+            ]
         },
         "z": {
             "cells": 1,
-            "range": [0.0, 1.0]
+            "range": [
+                0.0,
+                1.0
+            ]
         }
     },
     "boundary_condition": {
@@ -33,7 +39,7 @@
         }
     },
     "initial_condition": {
-        "rho": "lambda x: ((x>=0.2) & (x<=0.4)) * ( 1/6*(np.exp(-334.477 * (x-0.3-0.005)**2) + np.exp(-334.477 * (x - 0.3 + 0.005)**2) + 4 * np.exp(-334.477 * (x - 0.3)**2))) + ((x>=0.6) & (x<=0.8)) * 1 + ((x>=1.0) & (x<=1.2)) * (1 - np.abs(10 * (x - 1.1))) + ((x>=1.4) & (x<=1.6)) * (1/6 * (np.sqrt(np.maximum( 1 - 100 * (x - 1.5 - 0.005)**2, 0)) + np.sqrt(np.maximum( 1 - 100 * (x - 1.5 + 0.005)**2, 0)) + 4 * np.sqrt(np.maximum( 1 - 100 * (x - 1.5)**2, 0))) ) + ~( ((x>=0.2) & (x<=0.4)) | ((x>=0.6) & (x<=0.8)) | ((x>=1.0) & (x<=1.2)) | ((x>=1.4) & (x<=1.6)) ) * 0.01",
+        "rho": "lambda x: 1.018895 + 1.1650355 + -1.0256944*np.sin(2*np.pi*x) + 0.836343*np.sin(2*np.pi*x) + 0.33253357*np.sin(2*np.pi*x*2) + -0.36972687*np.sin(2*np.pi*x*2) + 0.4091281*np.sin(2*np.pi*x*3) + -0.12417916*np.sin(2*np.pi*x*3) + 1.5511559*np.sin(2*np.pi*x*4) + 0.35022068*np.sin(2*np.pi*x*4) + 1.0372529*np.sin(2*np.pi*x*5) + 1.2866642*np.sin(2*np.pi*x*5)",
         "u": 1.0,
         "v": 0.0,
         "w": 0.0,

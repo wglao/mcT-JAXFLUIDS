@@ -37,16 +37,16 @@ nt_train_data = 100
 nt_test_data = 500
 facdt = 1
 
-T = 2
+T = 2.0
 Nt = 1000
 dt = T / Nt
 nt_train_data = 200
 nt_test_data = 500
 N = 200
-x_max = 2
-dx = 2 / N
+x_max = 2.0
+dx = x_max / N
 
-u = 1
+u = 1.0
 v = 0
 w = 0
 
