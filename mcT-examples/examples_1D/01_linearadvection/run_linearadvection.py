@@ -34,8 +34,8 @@ def plot(cell_centers, times, data_dict):
     plt.show()
 
 if __name__ == "__main__":
-    # input_reader, initializer, sim_manager = setup("linearadvection.json", "numerical_setup.json")
-    input_reader, initializer, sim_manager = setup("next_run.json", "numerical_setup.json")
+    input_reader, initializer, sim_manager = setup("linearadvection.json", "numerical_setup.json")
+    # input_reader, initializer, sim_manager = setup("next_run.json", "numerical_setup.json")
     buffer_dictionary, sim_manager = sim(initializer, sim_manager)
     cell_centers, cell_sizes, times, data_dict = load(sim_manager)
     plot(cell_centers, times, data_dict)

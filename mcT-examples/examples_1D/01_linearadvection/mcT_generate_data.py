@@ -35,12 +35,12 @@ setup['general']['save_path'] = "./data/train"
 for iii in range(pars.num_train_samples):
 
     # randomize initial conditions
-    setup['initial_condition']['rho'] = "lambda x: " + str(max(a_test[iii,:])) + " + " + str(max(b_test[iii,:])) + " + " +\
-        str(a_train[iii,0]) + "*0.1*np.sin(2*np.pi*x*" + str(a_train[iii,0]) + ") + " + str(b_train[iii,0]) + "*0.1*np.sin(2*np.pi*x*" + str(b_train[iii,0]) + ") + " +\
-        str(a_train[iii,1]) + "*0.1*np.sin(2*np.pi*x*" + str(a_train[iii,1]) + ") + " + str(b_train[iii,1]) + "*0.1*np.sin(2*np.pi*x*" + str(b_train[iii,1]) + ") + " +\
-        str(a_train[iii,2]) + "*0.1*np.sin(2*np.pi*x*" + str(a_train[iii,2]) + ") + " + str(b_train[iii,2]) + "*0.1*np.sin(2*np.pi*x*" + str(b_train[iii,2]) + ") + " +\
-        str(a_train[iii,3]) + "*0.1*np.sin(2*np.pi*x*" + str(a_train[iii,3]) + ") + " + str(b_train[iii,3]) + "*0.1*np.sin(2*np.pi*x*" + str(b_train[iii,3]) + ") + " +\
-        str(a_train[iii,4]) + "*0.1*np.sin(2*np.pi*x*" + str(a_train[iii,4]) + ") + " + str(b_train[iii,4]) + "*0.1*np.sin(2*np.pi*x*" + str(b_train[iii,4]) + ")"
+    setup['initial_condition']['rho'] = "lambda x: " + str(max(a_test[iii,:])) + " + " + str(max(b_test[iii,:])) + " + 0.1*(" +\
+        str(a_train[iii,0]) + "np.sin(2*np.pi*x*" + str(a_train[iii,0]) + ") + " + str(b_train[iii,0]) + "np.sin(2*np.pi*x*" + str(b_train[iii,0]) + ") + " +\
+        str(a_train[iii,1]) + "np.sin(2*np.pi*x*" + str(a_train[iii,1]) + ") + " + str(b_train[iii,1]) + "np.sin(2*np.pi*x*" + str(b_train[iii,1]) + ") + " +\
+        str(a_train[iii,2]) + "np.sin(2*np.pi*x*" + str(a_train[iii,2]) + ") + " + str(b_train[iii,2]) + "np.sin(2*np.pi*x*" + str(b_train[iii,2]) + ") + " +\
+        str(a_train[iii,3]) + "np.sin(2*np.pi*x*" + str(a_train[iii,3]) + ") + " + str(b_train[iii,3]) + "np.sin(2*np.pi*x*" + str(b_train[iii,3]) + ") + " +\
+        str(a_train[iii,4]) + "np.sin(2*np.pi*x*" + str(a_train[iii,4]) + ") + " + str(b_train[iii,4]) + "np.sin(2*np.pi*x*" + str(b_train[iii,4]) + "))"
 
     f_new = open('next_run.json', 'w+')
     json.dump(setup, f_new, indent=4)

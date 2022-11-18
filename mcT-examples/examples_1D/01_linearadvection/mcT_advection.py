@@ -46,27 +46,61 @@ wandb.config.layer = pars.layers
 wandb.config.method = 'Dense_net'
 
 #! Step 1: Loading data
-# load h5 data and compile each time into an array
+# load h5 data and rearrange into dict
 
-Train_data = np.zeros(pars.num_train_samples, pars.nt_test_data+1, )
+Train_dt = {}
+Train_data = np.zeros((pars.num_train_samples, pars.nt_train_data+1, pars.N))
 train_path = 'data/train'
-train_files = os.listdir(train_path)
+train_runs = os.listdir(train_path)
 
-for ii, file in enumerate(train_files):
-    f = h5py.File(train_path + file, 'r')
-    data = f['primes']['density'][()]
-    # data_time = re.findall(r'\d+.\d+',file)
-    Train_data[ii,...] = data
+print('=' * 20 + ' >>')
+print('Loading train data ...')
+for ii, run in enumerate(train_runs):
+    data_path = os.path.join(train_path, run, 'domain')
+    saves = os.listdir(data_path)
+    Train_times = np.zeros(pars.nt_train_data+1)
+    
+    for jj, save in enumerate(saves[0:pars.nt_train_data+1]):
+        file = os.path.join(data_path, save)
+        f = h5py.File(file, 'r')
 
-Test_data = np.zeros(pars.num_test_samples, pars.nt_test_data+1, )
+        data = f['primes']['density'][()]
+        Train_data[ii,jj,:] = data
+        
+        save_time = f['time'][()]
+        Train_times[jj] = save_time
+    
+    # get dt at each step
+    Train_dt[ii] = Train_times[1:len(Train_times)] - Train_times[0:-1]
+
+print(Train_data.shape)
+
+Test_dt = {}
+Test_data = np.zeros((pars.num_test_samples, pars.nt_test_data+1, pars.N))
 test_path = 'data/test'
-test_files = os.listdir(test_path)
+test_runs = os.listdir(test_path)
 
-for ii, file in enumerate(test_files):
-    f = h5py.File(test_path + file, 'r')
-    data = f['primes']['density'][()]
-    # data_time = re.findall(r'\d+.\d+',file)
-    Test_data[ii,...] = data
+print('=' * 20 + ' >>')
+print('Loading test data ...')
+for ii, run in enumerate(test_runs):
+    data_path = os.path.join(test_path, run, 'domain')
+    saves = os.listdir(data_path)
+    Test_times = np.zeros(pars.nt_test_data+1)
+    
+    for jj, save in enumerate(saves[0:pars.nt_test_data+1]):
+        file = os.path.join(data_path, save)
+        f = h5py.File(file, 'r')
+        
+        data = f['primes']['density'][()]
+        Test_data[ii,jj,:] = data
+        
+        save_time = f['time'][()]
+        Test_times[jj] = save_time
+    
+    # get dt at each step
+    Test_dt[ii] = Test_times[1:len(Test_times)] - Test_times[0:-1]
+
+print(Test_data.shape)
 
 #! Step 2: Building up a neural network
 # Densely connected feed forward
@@ -97,11 +131,11 @@ init_params = [W1, W2, b1, b2]
 
 print('=' * 20 + ' >> Success!')
 
-dt = pars.dt
+# dt = pars.dt
 dx = pars.dx
 velo = pars.u
 #! Step 3: Forward solver (single time step)
-def single_solve_forward(un):
+def single_solve_forward(dt, un):
     # use different difference schemes for edge case
     lu = len(un)
     u = un + velo * (- dt / dx * (jnp.roll(un, -1) - jnp.roll(un, 1)) / 2 )
@@ -112,7 +146,7 @@ def single_solve_forward(un):
     return u
 
 #@jit
-def single_forward_pass(params, un):
+def single_forward_pass(dt, params, un):
     u = un - pars.facdt * dt * forward_pass(params, un)
     return u.flatten()
 
@@ -122,26 +156,26 @@ def single_forward_pass(params, un):
 def MSE(pred, true):
     return jnp.mean(jnp.square(pred - true))
 
-def squential_mc(i, args):
+# def squential_mc(i, args):
     
-    loss_mc, u_mc, u_ml, params = args
-    u_ml_next = single_forward_pass(params, u_ml)
-    u_mc_next = single_solve_forward(u_mc)
+#     loss_mc, u_mc, u_ml, params = args
+#     u_ml_next = single_forward_pass(params, u_ml)
+#     u_mc_next = single_solve_forward(u_mc)
     
-    loss_mc += MSE(u_mc, u_ml_next)
+#     loss_mc += MSE(u_mc, u_ml_next)
 
-    return loss_mc, u_mc_next, u_ml_next, params
+#     return loss_mc, u_mc_next, u_ml_next, params
 
 def squential_ml_second_phase(i, args):
     ''' I have checked this loss function!'''
 
-    loss_ml, loss_mc, u_ml, u_true, params = args
+    loss_ml, loss_mc, u_ml, u_true, params, dt = args
     
     # This is u_mc for the current
-    u_mc = single_solve_forward(u_ml)
+    u_mc = single_solve_forward(dt, u_ml)
     
     # This is u_ml for the next step
-    u_ml_next = single_forward_pass(params, u_ml)
+    u_ml_next = single_forward_pass(dt, params, u_ml)
     
     # # The model-constrained loss 
     # loss_mc += MSE(u_mc, u_true[i+1,:]) 
@@ -156,15 +190,17 @@ def squential_ml_second_phase(i, args):
     return loss_ml, loss_mc, u_ml_next, u_true, params
 
 
-def loss_one_sample_one_time(params, u):
+def loss_one_sample_one_time(params, u, i):
     loss_ml = 0
     loss_mc = 0
 
     # first step prediction
-    u_ml = single_forward_pass(params, u[0, :])
+    
+    dt = Train_dt[i-1]
+    u_ml = single_forward_pass(dt, params, u[0, :])
 
     # for the following steps up to sequential steps n_seq
-    loss_ml,loss_mc, u_ml, _, _ = lax.fori_loop(1, pars.n_seq+1, squential_ml_second_phase, (loss_ml, loss_mc, u_ml, u, params))
+    loss_ml,loss_mc, u_ml, _, _ = lax.fori_loop(1, pars.n_seq+1, squential_ml_second_phase, (loss_ml, loss_mc, u_ml, u, params, dt))
     loss_ml += MSE(u_ml, u[-1, :])
 
     return loss_ml + pars.mc_alpha * loss_mc
@@ -173,8 +209,8 @@ loss_one_sample_one_time_batch = vmap(loss_one_sample_one_time, in_axes=(None, 0
 
 # ? 4.2 For one sample of (1, Nt, Nx)
 #@jit
-def loss_one_sample(params, u_one_sample):
-    return jnp.sum(loss_one_sample_one_time_batch(params, u_one_sample))
+def loss_one_sample(params, u_one_sample, i):
+    return jnp.sum(loss_one_sample_one_time_batch(params, u_one_sample, i))
 
 loss_one_sample_batch = vmap(loss_one_sample, in_axes=(None, 0), out_axes=0)
 
@@ -190,21 +226,21 @@ def transform_one_sample_data(u_one_sample):
 transform_one_sample_data_batch = vmap(transform_one_sample_data, in_axes=0)
 
 #@jit
-def LossmcDNN(params, data):
-    return jnp.sum(loss_one_sample_batch(params, transform_one_sample_data_batch(data)))
+def LossmcDNN(params, data, i):
+    return jnp.sum(loss_one_sample_batch(params, transform_one_sample_data_batch(data), i))
 
 
 #! Step 5: Computing test error, predictions over all time steps
 @jit
 def neural_solver(params, U_test):
-
     u = U_test[0, :]
 
     U = jnp.zeros((pars.nt_test_data + 1, N))
     U = U.at[0, :].set(u)
 
     for i in range(1, pars.nt_test_data + 1):
-        u = single_forward_pass(params, u)
+        dt = Test_dt[i-1]
+        u = single_forward_pass(dt, params, u)
         U = U.at[i, :].set(u)
 
     return U
@@ -223,7 +259,7 @@ def body_fun(i, args):
     data_batch = lax.dynamic_slice_in_dim(data, i * pars.batch_size, pars.batch_size)
 
     loss, gradients = value_and_grad(LossmcDNN)(
-        opt_get_params(opt_state), data_batch)
+        opt_get_params(opt_state), data_batch, i)
 
     opt_state = opt_update(i, gradients, opt_state)
 

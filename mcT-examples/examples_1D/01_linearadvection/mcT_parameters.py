@@ -33,8 +33,6 @@ units = 5000
 
 num_epochs = int(3e4)
 
-nt_train_data = 100
-nt_test_data = 500
 facdt = 1
 
 T = 2.0
@@ -52,4 +50,4 @@ w = 0
 
 n_plot = 3
 # Plot_Steps = [0, 50, 100, 200, 500]
-Plot_Steps = np.linspace(0,nt_test_data, n_plot, dtype=int)
+Plot_Steps = lambda nt_test_data: np.linspace(0, nt_test_data, n_plot, dtype=int)
