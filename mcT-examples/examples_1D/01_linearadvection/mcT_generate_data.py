@@ -49,9 +49,10 @@ for iii in range(pars.num_train_samples):
     # don't need sim return because data is not being plotted
     _, initializer, sim_manager = run.setup("next_run.json", "numerical_setup.json")
     _,_ = run.sim(initializer, sim_manager)
+
 # test sets
+
 setup['general']['save_path'] = "./data/test"
-# for iii in range(pars.num_test_samples):
 for iii in range(pars.num_test_samples):
 
     # randomize initial conditions
