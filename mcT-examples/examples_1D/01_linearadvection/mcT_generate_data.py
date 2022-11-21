@@ -20,11 +20,12 @@ f = open('numerical_setup.json', 'r+')
 num_setup = json.load(f)
 f.close()
 
-num_setup['conservatives']['time_integration']['fixed_timestep'] = pars.dt/10
+if 'fixed_timestep' not in list(num_setup['conservatives']['time_integration'].keys()):
+    num_setup['conservatives']['time_integration']['fixed_timestep'] = pars.dt/10
 
-f = open('numerical_setup.json', 'w+')
-json.dump(num_setup, f, indent=4)
-f.close()
+    f = open('numerical_setup.json', 'w+')
+    json.dump(num_setup, f, indent=4)
+    f.close()
 
 
 f = open('linearadvection.json', 'r+')
