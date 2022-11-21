@@ -48,7 +48,6 @@ wandb.config.method = 'Dense_net'
 #! Step 1: Loading data
 # load h5 data and rearrange into dict
 
-Train_dt = {}
 Train_data = np.zeros((pars.num_train_samples, pars.nt_train_data+1, pars.N))
 train_path = 'data/train'
 train_runs = os.listdir(train_path)
@@ -69,14 +68,9 @@ for ii, run in enumerate(train_runs):
         
         save_time = f['time'][()]
         Train_times[jj] = save_time
-    
-    # get dt at each step
-    Train_dt[ii] = Train_times[1:len(Train_times)] - Train_times[0:-1]
 
 print(Train_data.shape)
-print(Train_dt)
 
-Test_dt = {}
 Test_data = np.zeros((pars.num_test_samples, pars.nt_test_data+1, pars.N))
 test_path = 'data/test'
 test_runs = os.listdir(test_path)
@@ -97,9 +91,6 @@ for ii, run in enumerate(test_runs):
         
         save_time = f['time'][()]
         Test_times[jj] = save_time
-    
-    # get dt at each step
-    Test_dt[ii] = Test_times[1:len(Test_times)] - Test_times[0:-1]
 
 print(Test_data.shape)
 
@@ -132,11 +123,11 @@ init_params = [W1, W2, b1, b2]
 
 print('=' * 20 + ' >> Success!')
 
-# dt = pars.dt
+dt = pars.dt
 dx = pars.dx
 velo = pars.u
 #! Step 3: Forward solver (single time step)
-def single_solve_forward(dt, un):
+def single_solve_forward(un):
     # use different difference schemes for edge case
     lu = len(un)
     u = un + velo * (- dt / dx * (jnp.roll(un, -1) - jnp.roll(un, 1)) / 2 )
@@ -147,7 +138,7 @@ def single_solve_forward(dt, un):
     return u
 
 #@jit
-def single_forward_pass(dt, params, un):
+def single_forward_pass(params, un):
     u = un - pars.facdt * dt * forward_pass(params, un)
     return u.flatten()
 
@@ -170,15 +161,13 @@ def MSE(pred, true):
 def squential_ml_second_phase(i, args):
     ''' I have checked this loss function!'''
 
-    loss_ml, loss_mc, u_ml, u_true, dt_array, params = args
-    
-    dt = dt_array[i-1]
+    loss_ml, loss_mc, u_ml, u_true, params = args
 
     # This is u_mc for the current
-    u_mc = single_solve_forward(dt, u_ml)
+    u_mc = single_solve_forward(u_ml)
     
     # This is u_ml for the next step
-    u_ml_next = single_forward_pass(dt, params, u_ml)
+    u_ml_next = single_forward_pass(params, u_ml)
     
     # # The model-constrained loss 
     # loss_mc += MSE(u_mc, u_true[i+1,:]) 
@@ -193,7 +182,7 @@ def squential_ml_second_phase(i, args):
     return loss_ml, loss_mc, u_ml_next, u_true, params
 
 
-def loss_one_sample_one_time(params, u, dt_array):
+def loss_one_sample_one_time(params, u):
     loss_ml = 0
     loss_mc = 0
 
@@ -202,19 +191,19 @@ def loss_one_sample_one_time(params, u, dt_array):
     u_ml = single_forward_pass(pars.dt, params, u[0, :])
 
     # for the following steps up to sequential steps n_seq
-    loss_ml,loss_mc, u_ml, _, _ = lax.fori_loop(1, pars.n_seq+1, squential_ml_second_phase, (loss_ml, loss_mc, u_ml, u, dt_array, params))
+    loss_ml,loss_mc, u_ml, _, _ = lax.fori_loop(1, pars.n_seq+1, squential_ml_second_phase, (loss_ml, loss_mc, u_ml, u, params))
     loss_ml += MSE(u_ml, u[-1, :])
 
     return loss_ml + pars.mc_alpha * loss_mc
 
-loss_one_sample_one_time_batch = vmap(loss_one_sample_one_time, in_axes=(None, 0, None), out_axes=0)
+loss_one_sample_one_time_batch = vmap(loss_one_sample_one_time, in_axes=(None, 0), out_axes=0)
 
 # ? 4.2 For one sample of (1, Nt, Nx)
 #@jit
-def loss_one_sample(params, u_one_sample, dt_array):
-    return jnp.sum(loss_one_sample_one_time_batch(params, u_one_sample, dt_array))
+def loss_one_sample(params, u_one_sample):
+    return jnp.sum(loss_one_sample_one_time_batch(params, u_one_sample))
 
-loss_one_sample_batch = vmap(loss_one_sample, in_axes=(None, 0, None), out_axes=0)
+loss_one_sample_batch = vmap(loss_one_sample, in_axes=(None, 0), out_axes=0)
 
 # ? 4.3 For the whole data (n_samples, Nt, Nx)
 # ? This step transform data to disired shape for training (n_train_samples, Nt, Nx) -> (n_train_samples, Nt, n_seq, Nx)
@@ -228,8 +217,8 @@ def transform_one_sample_data(u_one_sample):
 transform_one_sample_data_batch = vmap(transform_one_sample_data, in_axes=0)
 
 #@jit
-def LossmcDNN(params, data, dt_array):
-    return jnp.sum(loss_one_sample_batch(params, transform_one_sample_data_batch(data), dt_array))
+def LossmcDNN(params, data):
+    return jnp.sum(loss_one_sample_batch(params, transform_one_sample_data_batch(data)))
 
 
 #! Step 5: Computing test error, predictions over all time steps
@@ -256,13 +245,12 @@ def test_acc(params, Test_set):
 
 #! Step 6: Epoch loops fucntions and training settings
 def body_fun(i, args):
-    loss, opt_state, data, train_dt = args
+    loss, opt_state, data = args
 
     data_batch = lax.dynamic_slice_in_dim(data, i * pars.batch_size, pars.batch_size)
-    dt_batch = lax.dynamic_slice_in_dim(train_dt,i,1)
 
     loss, gradients = value_and_grad(LossmcDNN)(
-        opt_get_params(opt_state), data_batch, dt_batch)
+        opt_get_params(opt_state), data_batch)
 
     opt_state = opt_update(i, gradients, opt_state)
 
@@ -270,12 +258,12 @@ def body_fun(i, args):
 
 
 @jit
-def run_epoch(opt_state, data, train_dt):
+def run_epoch(opt_state, data):
     loss = 0
-    return lax.fori_loop(0, num_batches, body_fun, (loss, opt_state, data, train_dt))
+    return lax.fori_loop(0, num_batches, body_fun, (loss, opt_state, data))
 
 
-def TrainModel(train_data, test_data, num_epochs, opt_state, train_dt):
+def TrainModel(train_data, test_data, num_epochs, opt_state):
 
     test_accuracy_min = 100
     epoch_min = 1
@@ -283,7 +271,7 @@ def TrainModel(train_data, test_data, num_epochs, opt_state, train_dt):
     for epoch in range(1, num_epochs+1):
         
         t1 = time.time()
-        train_loss, opt_state, _ = run_epoch(opt_state, train_data, train_dt)
+        train_loss, opt_state, _ = run_epoch(opt_state, train_data)
         t2 = time.time()
 
         test_accuracy = test_acc(opt_get_params(opt_state), test_data)
@@ -308,7 +296,7 @@ num_batches = num_complete_batches + bool(leftover)
 opt_int, opt_update, opt_get_params = optimizers.adam(pars.learning_rate)
 opt_state = opt_int(init_params)
 
-best_opt_state, end_opt_state = TrainModel(Train_data, Test_data, pars.num_epochs, opt_state, Train_dt)
+best_opt_state, end_opt_state = TrainModel(Train_data, Test_data, pars.num_epochs, opt_state)
 
 optimum_params = opt_get_params(best_opt_state)
 End_params = opt_get_params(end_opt_state)
