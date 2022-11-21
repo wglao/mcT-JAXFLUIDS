@@ -74,6 +74,7 @@ for ii, run in enumerate(train_runs):
     Train_dt[ii] = Train_times[1:len(Train_times)] - Train_times[0:-1]
 
 print(Train_data.shape)
+print(Train_dt)
 
 Test_dt = {}
 Test_data = np.zeros((pars.num_test_samples, pars.nt_test_data+1, pars.N))
@@ -169,8 +170,10 @@ def MSE(pred, true):
 def squential_ml_second_phase(i, args):
     ''' I have checked this loss function!'''
 
-    loss_ml, loss_mc, u_ml, u_true, params, dt = args
+    loss_ml, loss_mc, u_ml, u_true, dt_array, params = args
     
+    dt = dt_array[i-1]
+
     # This is u_mc for the current
     u_mc = single_solve_forward(dt, u_ml)
     
@@ -190,29 +193,28 @@ def squential_ml_second_phase(i, args):
     return loss_ml, loss_mc, u_ml_next, u_true, params
 
 
-def loss_one_sample_one_time(params, u, i):
+def loss_one_sample_one_time(params, u, dt_array):
     loss_ml = 0
     loss_mc = 0
 
     # first step prediction
-    
-    dt = Train_dt[i-1]
-    u_ml = single_forward_pass(dt, params, u[0, :])
+
+    u_ml = single_forward_pass(pars.dt, params, u[0, :])
 
     # for the following steps up to sequential steps n_seq
-    loss_ml,loss_mc, u_ml, _, _ = lax.fori_loop(1, pars.n_seq+1, squential_ml_second_phase, (loss_ml, loss_mc, u_ml, u, params, dt))
+    loss_ml,loss_mc, u_ml, _, _ = lax.fori_loop(1, pars.n_seq+1, squential_ml_second_phase, (loss_ml, loss_mc, u_ml, u, dt_array, params))
     loss_ml += MSE(u_ml, u[-1, :])
 
     return loss_ml + pars.mc_alpha * loss_mc
 
-loss_one_sample_one_time_batch = vmap(loss_one_sample_one_time, in_axes=(None, 0), out_axes=0)
+loss_one_sample_one_time_batch = vmap(loss_one_sample_one_time, in_axes=(None, 0, None), out_axes=0)
 
 # ? 4.2 For one sample of (1, Nt, Nx)
 #@jit
-def loss_one_sample(params, u_one_sample, i):
-    return jnp.sum(loss_one_sample_one_time_batch(params, u_one_sample, i))
+def loss_one_sample(params, u_one_sample, dt_array):
+    return jnp.sum(loss_one_sample_one_time_batch(params, u_one_sample, dt_array))
 
-loss_one_sample_batch = vmap(loss_one_sample, in_axes=(None, 0), out_axes=0)
+loss_one_sample_batch = vmap(loss_one_sample, in_axes=(None, 0, None), out_axes=0)
 
 # ? 4.3 For the whole data (n_samples, Nt, Nx)
 # ? This step transform data to disired shape for training (n_train_samples, Nt, Nx) -> (n_train_samples, Nt, n_seq, Nx)
@@ -226,8 +228,8 @@ def transform_one_sample_data(u_one_sample):
 transform_one_sample_data_batch = vmap(transform_one_sample_data, in_axes=0)
 
 #@jit
-def LossmcDNN(params, data, i):
-    return jnp.sum(loss_one_sample_batch(params, transform_one_sample_data_batch(data), i))
+def LossmcDNN(params, data, dt_array):
+    return jnp.sum(loss_one_sample_batch(params, transform_one_sample_data_batch(data), dt_array))
 
 
 #! Step 5: Computing test error, predictions over all time steps
@@ -254,12 +256,13 @@ def test_acc(params, Test_set):
 
 #! Step 6: Epoch loops fucntions and training settings
 def body_fun(i, args):
-    loss, opt_state, data = args
+    loss, opt_state, data, train_dt = args
 
     data_batch = lax.dynamic_slice_in_dim(data, i * pars.batch_size, pars.batch_size)
+    dt_batch = lax.dynamic_slice_in_dim(train_dt,i,1)
 
     loss, gradients = value_and_grad(LossmcDNN)(
-        opt_get_params(opt_state), data_batch, i)
+        opt_get_params(opt_state), data_batch, dt_batch)
 
     opt_state = opt_update(i, gradients, opt_state)
 
@@ -267,12 +270,12 @@ def body_fun(i, args):
 
 
 @jit
-def run_epoch(opt_state, data):
+def run_epoch(opt_state, data, train_dt):
     loss = 0
-    return lax.fori_loop(0, num_batches, body_fun, (loss, opt_state, data))
+    return lax.fori_loop(0, num_batches, body_fun, (loss, opt_state, data, train_dt))
 
 
-def TrainModel(train_data, test_data, num_epochs, opt_state):
+def TrainModel(train_data, test_data, num_epochs, opt_state, train_dt):
 
     test_accuracy_min = 100
     epoch_min = 1
@@ -280,7 +283,7 @@ def TrainModel(train_data, test_data, num_epochs, opt_state):
     for epoch in range(1, num_epochs+1):
         
         t1 = time.time()
-        train_loss, opt_state, _ = run_epoch(opt_state, train_data)
+        train_loss, opt_state, _ = run_epoch(opt_state, train_data, train_dt)
         t2 = time.time()
 
         test_accuracy = test_acc(opt_get_params(opt_state), test_data)
@@ -305,7 +308,7 @@ num_batches = num_complete_batches + bool(leftover)
 opt_int, opt_update, opt_get_params = optimizers.adam(pars.learning_rate)
 opt_state = opt_int(init_params)
 
-best_opt_state, end_opt_state = TrainModel(Train_data, Test_data, pars.num_epochs, opt_state)
+best_opt_state, end_opt_state = TrainModel(Train_data, Test_data, pars.num_epochs, opt_state, Train_dt)
 
 optimum_params = opt_get_params(best_opt_state)
 End_params = opt_get_params(end_opt_state)

@@ -16,6 +16,16 @@ b_test = random.normal(pars.key_data_test_b, (pars.num_test_samples, 5))
 
 # create random initial conditions and run jax fluids
 # for each training and test dataset
+f = open('numerical_setup.json', 'r+')
+num_setup = json.load(f)
+f.close()
+
+num_setup['conservatives']['time_integration']['fixed_timestep'] = pars.dt/10
+
+f = open('numerical_setup.json', 'w+')
+json.dump(num_setup, f, indent=4)
+f.close()
+
 
 f = open('linearadvection.json', 'r+')
 setup = json.load(f)
@@ -42,9 +52,9 @@ for iii in range(pars.num_train_samples):
         str(a_train[iii,3]) + "*np.sin(2*np.pi*x*" + str(a_train[iii,3]) + ") + " + str(b_train[iii,3]) + "*np.sin(2*np.pi*x*" + str(b_train[iii,3]) + ") + " +\
         str(a_train[iii,4]) + "*np.sin(2*np.pi*x*" + str(a_train[iii,4]) + ") + " + str(b_train[iii,4]) + "*np.sin(2*np.pi*x*" + str(b_train[iii,4]) + "))"
 
-    f_new = open('next_run.json', 'w+')
-    json.dump(setup, f_new, indent=4)
-    f_new.close()
+    f = open('next_run.json', 'w+')
+    json.dump(setup, f, indent=4)
+    f.close()
     
     # don't need sim return because data is not being plotted
     _, initializer, sim_manager = run.setup("next_run.json", "numerical_setup.json")
@@ -63,9 +73,9 @@ for iii in range(pars.num_test_samples):
         str(a_test[iii,3]) + "*0.1*np.sin(2*np.pi*x*" + str(a_test[iii,3]) + ")**2 + " + str(b_test[iii,3]) + "*0.1*np.sin(2*np.pi*x*" + str(b_test[iii,3]) + ")**2 + " +\
         str(a_test[iii,4]) + "*0.1*np.sin(2*np.pi*x*" + str(a_test[iii,4]) + ")**2 + " + str(b_test[iii,4]) + "*0.1*np.sin(2*np.pi*x*" + str(b_test[iii,4]) + ")**2"
 
-    f_new = open('next_run.json', 'w+')
-    json.dump(setup, f_new, indent=4)
-    f_new.close()
+    f = open('next_run.json', 'w+')
+    json.dump(setup, f, indent=4)
+    f.close()
 
     # don't need sim return because data is not being plotted
     _, initializer, sim_manager = run.setup("next_run.json", "numerical_setup.json")
