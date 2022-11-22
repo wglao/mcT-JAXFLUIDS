@@ -321,10 +321,10 @@ def plot_compare(U_True, U_Pred, filename):
     fig.patch.set_facecolor('xkcd:white')
 
     # Compare solutions
-    for i in range(5):
+    for i in range(pars.n_plot):
         ut = jnp.reshape(U_True[pars.Plot_Steps[i], :], (N, 1))
         up = jnp.reshape(U_Pred[pars.Plot_Steps[i], :], (N, 1))
-        ax = fig.add_subplot(1, 5, i+1)
+        ax = fig.add_subplot(1, pars.n_plot, i+1)
         l1 = ax.plot(x, ut, '-', linewidth=2, label='True')
         l2 = ax.plot(x, up, '--', linewidth=2, label='Predicted')
         ax.set_aspect('auto', adjustable='box')

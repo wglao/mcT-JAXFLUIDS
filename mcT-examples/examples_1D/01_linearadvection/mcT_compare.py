@@ -67,7 +67,7 @@ problem = 'linearadvection'
 d_only_params = unpickle_params('Network/Best_' + problem + '_seq_n_mc_' + str(pars.n_seq_mc) +'_forward_mc_train_d' + str(pars.num_train) + '_alpha_0_lr_' + str(pars.learning_rate) + '_batch_' + str(pars.batch_size) + '_nseq_' + str(pars.n_seq) + '_layer_' + str(pars.layers) + 'neurons' + str(pars.units) + '_epochs_' + str(pars.num_epochs))
 
 # model-constrained
-# mc_params = unpickle_params('Network/Best_wave1d_dt_train-test_' + str(dt) + '-' + str(dt_test) + '_seq_n_mc_' + str(n_seq_mc) +'_forward_mc_train_d' + str(num_train) + '_alpha_' + str(1e5) + '_lr_' + str(learning_rate) + '_batch_' + str(batch_size) + '_nseq_' + str(n_seq) + '_layer_' + str(layers) + 'neurons' + str(units) + '_epochs_' + str(num_epochs))
+mc_params = unpickle_params('Network/Best_' + problem + '_seq_n_mc_' + str(pars.n_seq_mc) +'_forward_mc_train_d' + str(pars.num_train) + '_alpha_' + str(pars.mc_alpha) + '_lr_' + str(pars.learning_rate) + '_batch_' + str(pars.batch_size) + '_nseq_' + str(pars.n_seq) + '_layer_' + str(pars.layers) + 'neurons' + str(pars.units) + '_epochs_' + str(pars.num_epochs))
 
 # with noise
 # noisy_params = unpickle_params('Network/Best_wave1d_noise_0.02_dt_train-test_' + str(dt) + '-' + str(dt_test) + '_seq_n_mc_' + str(n_seq_mc) +'_forward_mc_train_d' + str(num_train) + '_alpha_0_lr_' + str(learning_rate) + '_batch_' + str(batch_size) + '_nseq_' + str(n_seq) + '_layer_' + str(layers) + 'neurons' + str(units) + '_epochs_' + str(num_epochs))
@@ -114,12 +114,12 @@ plot_sample = 75
 U_true = truth[plot_sample, :, :]
 if input_noise:
     U_d_only = neural_solver_batch(d_only_params, truth_noise)[plot_sample, :, :]
-    # U_mc = neural_solver_batch(mc_params, truth_noise)[plot_sample, :, :]
+    U_mc = neural_solver_batch(mc_params, truth_noise)[plot_sample, :, :]
     # U_noisy = neural_solver_batch(noisy_params, truth_noise)[plot_sample, :, :]
     # U_mcn = neural_solver_batch(mcn_params, truth_noise)[plot_sample, :, :]
 else:
     U_d_only = neural_solver_batch(d_only_params, truth)[plot_sample, :, :]
-    # U_mc = neural_solver_batch(mc_params, truth)[plot_sample, :, :]
+    U_mc = neural_solver_batch(mc_params, truth)[plot_sample, :, :]
     # U_noisy = neural_solver_batch(noisy_params, truth)[plot_sample, :, :]
     # U_mcn = neural_solver_batch(mcn_params, truth)[plot_sample, :, :]
 
@@ -130,20 +130,20 @@ for i in range(pars.n_plot):
 
     ut = jnp.reshape(U_true[pars.Plot_Steps[i], :], (N, 1))
     ud = jnp.reshape(U_d_only[pars.Plot_Steps[i], :], (N, 1))
-    # um = jnp.reshape(U_mc[Plot_Steps[i], :], (N, 1))
+    um = jnp.reshape(U_mc[pars.Plot_Steps[i], :], (N, 1))
     # un = jnp.reshape(U_noisy[Plot_Steps[i], :], (N, 1))
     # umn = jnp.reshape(U_mc[Plot_Steps[i], :], (N, 1))
     
     ax = fig.add_subplot(1, pars.n_plot, i+1)
     l1 = ax.plot(x, ut, '-', linewidth=1.5, label='True')
     l2 = ax.plot(x, ud, ':o', markevery=5, fillstyle='none', linewidth=1.5, label='Data only')
-    # l3 = ax.plot(x, um, ':v', markevery=5, fillstyle='none', linewidth=1.5, label='Model constrained (1e5)')
+    l3 = ax.plot(x, um, ':v', markevery=5, fillstyle='none', linewidth=1.5, label='Model constrained (1e5)')
     # l4 = ax.plot(x, un, ':x', markevery=5, linewidth=1.5, label='With noise (0.02)')
     # l5 = ax.plot(x, umn, ':+', markevery=5, linewidth=1.5, label='Model constrained (1e5) and with noise (0.02)')
 
     # ax.set_aspect('auto', adjustable='box')
-    ax.set_xticks([])
-    ax.set_yticks([])
+    # ax.set_xticks([])
+    # ax.set_yticks([])
     ax.set_title('t = ' + str(pars.Plot_Steps[i]))
 
     if i == pars.n_plot-1:

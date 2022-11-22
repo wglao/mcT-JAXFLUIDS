@@ -47,11 +47,11 @@ for iii in range(pars.num_train_samples):
 
     # randomize initial conditions
     setup['initial_condition']['rho'] = "lambda x: " + str(np.max(np.abs(a_test[iii,:]))) + " + " + str(np.max(np.abs(b_test[iii,:]))) + " + 0.1*(" +\
-        str(a_train[iii,0]) + "*np.sin(2*np.pi*x*" + str(a_train[iii,0]) + ") + " + str(b_train[iii,0]) + "*np.sin(2*np.pi*x*" + str(b_train[iii,0]) + ") + " +\
-        str(a_train[iii,1]) + "*np.sin(2*np.pi*x*" + str(a_train[iii,1]) + ") + " + str(b_train[iii,1]) + "*np.sin(2*np.pi*x*" + str(b_train[iii,1]) + ") + " +\
-        str(a_train[iii,2]) + "*np.sin(2*np.pi*x*" + str(a_train[iii,2]) + ") + " + str(b_train[iii,2]) + "*np.sin(2*np.pi*x*" + str(b_train[iii,2]) + ") + " +\
-        str(a_train[iii,3]) + "*np.sin(2*np.pi*x*" + str(a_train[iii,3]) + ") + " + str(b_train[iii,3]) + "*np.sin(2*np.pi*x*" + str(b_train[iii,3]) + ") + " +\
-        str(a_train[iii,4]) + "*np.sin(2*np.pi*x*" + str(a_train[iii,4]) + ") + " + str(b_train[iii,4]) + "*np.sin(2*np.pi*x*" + str(b_train[iii,4]) + "))"
+        str(a_train[iii,0]) + "*np.sin(2*np.pi*x*" + str(a_train[iii,0]) + "/" + str(pars.x_max) + ") + " + str(b_train[iii,0]) + "*np.sin(2*np.pi*x*" + str(b_train[iii,0]) + "/" + str(pars.x_max) + ") + " +\
+        str(a_train[iii,1]) + "*np.sin(2*np.pi*x*" + str(a_train[iii,1]) + "/" + str(pars.x_max) + ") + " + str(b_train[iii,1]) + "*np.sin(2*np.pi*x*" + str(b_train[iii,1]) + "/" + str(pars.x_max) + ") + " +\
+        str(a_train[iii,2]) + "*np.sin(2*np.pi*x*" + str(a_train[iii,2]) + "/" + str(pars.x_max) + ") + " + str(b_train[iii,2]) + "*np.sin(2*np.pi*x*" + str(b_train[iii,2]) + "/" + str(pars.x_max) + ") + " +\
+        str(a_train[iii,3]) + "*np.sin(2*np.pi*x*" + str(a_train[iii,3]) + "/" + str(pars.x_max) + ") + " + str(b_train[iii,3]) + "*np.sin(2*np.pi*x*" + str(b_train[iii,3]) + "/" + str(pars.x_max) + ") + " +\
+        str(a_train[iii,4]) + "*np.sin(2*np.pi*x*" + str(a_train[iii,4]) + "/" + str(pars.x_max) + ") + " + str(b_train[iii,4]) + "*np.sin(2*np.pi*x*" + str(b_train[iii,4]) + "/" + str(pars.x_max) + "))"
 
     f = open('next_run.json', 'w+')
     json.dump(setup, f, indent=4)
