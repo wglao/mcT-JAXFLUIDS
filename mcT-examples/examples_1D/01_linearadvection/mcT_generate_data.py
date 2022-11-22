@@ -67,12 +67,12 @@ setup['general']['save_path'] = "./data/test"
 for iii in range(pars.num_test_samples):
 
     # randomize initial conditions
-    setup['initial_condition']['rho'] = "lambda x: 1 + " +\
-        str(a_test[iii,0]) + "*0.1*np.sin(2*np.pi*x*" + str(a_test[iii,0]) + ")**2 + " + str(b_test[iii,0]) + "*0.1*np.sin(2*np.pi*x*" + str(b_test[iii,0]) + ")**2 + " +\
-        str(a_test[iii,1]) + "*0.1*np.sin(2*np.pi*x*" + str(a_test[iii,1]) + ")**2 + " + str(b_test[iii,1]) + "*0.1*np.sin(2*np.pi*x*" + str(b_test[iii,1]) + ")**2 + " +\
-        str(a_test[iii,2]) + "*0.1*np.sin(2*np.pi*x*" + str(a_test[iii,2]) + ")**2 + " + str(b_test[iii,2]) + "*0.1*np.sin(2*np.pi*x*" + str(b_test[iii,2]) + ")**2 + " +\
-        str(a_test[iii,3]) + "*0.1*np.sin(2*np.pi*x*" + str(a_test[iii,3]) + ")**2 + " + str(b_test[iii,3]) + "*0.1*np.sin(2*np.pi*x*" + str(b_test[iii,3]) + ")**2 + " +\
-        str(a_test[iii,4]) + "*0.1*np.sin(2*np.pi*x*" + str(a_test[iii,4]) + ")**2 + " + str(b_test[iii,4]) + "*0.1*np.sin(2*np.pi*x*" + str(b_test[iii,4]) + ")**2"
+    setup['initial_condition']['rho'] = "lambda x: 1 + 0.1*(" +\
+        str(a_test[iii,0]) + "*np.sin(2*np.pi*x*" + str(a_test[iii,0]) + "/" + str(pars.x_max) + ")**2 + " + str(b_test[iii,0]) + "*np.sin(2*np.pi*x*" + str(b_test[iii,0]) + "/" + str(pars.x_max) + ")**2 + " +\
+        str(a_test[iii,1]) + "*np.sin(2*np.pi*x*" + str(a_test[iii,1]) + "/" + str(pars.x_max) + ")**2 + " + str(b_test[iii,1]) + "*np.sin(2*np.pi*x*" + str(b_test[iii,1]) + "/" + str(pars.x_max) + ")**2 + " +\
+        str(a_test[iii,2]) + "*np.sin(2*np.pi*x*" + str(a_test[iii,2]) + "/" + str(pars.x_max) + ")**2 + " + str(b_test[iii,2]) + "*np.sin(2*np.pi*x*" + str(b_test[iii,2]) + "/" + str(pars.x_max) + ")**2 + " +\
+        str(a_test[iii,3]) + "*np.sin(2*np.pi*x*" + str(a_test[iii,3]) + "/" + str(pars.x_max) + ")**2 + " + str(b_test[iii,3]) + "*np.sin(2*np.pi*x*" + str(b_test[iii,3]) + "/" + str(pars.x_max) + ")**2 + " +\
+        str(a_test[iii,4]) + "*np.sin(2*np.pi*x*" + str(a_test[iii,4]) + "/" + str(pars.x_max) + ")**2 + " + str(b_test[iii,4]) + "*np.sin(2*np.pi*x*" + str(b_test[iii,4]) + "/" + str(pars.x_max) + ")**2)"
 
     f = open('next_run.json', 'w+')
     json.dump(setup, f, indent=4)
