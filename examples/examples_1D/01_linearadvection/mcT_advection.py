@@ -80,9 +80,7 @@ for ii, run in enumerate(train_runs):
 
 print(Train_data.shape)
 
-
-
-if noise_level > 0:
+if noise_flag:
     ns, nt, nx = Train_data.shape
     noise_vec = jax.random.normal(pars.key_data_noise, Train_data.shape)
     for ii in range(ns):

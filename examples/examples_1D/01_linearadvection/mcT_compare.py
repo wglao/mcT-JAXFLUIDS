@@ -75,9 +75,37 @@ mc_params = unpickle_params('Network/Best_' + problem + '_seq_n_mc_' + str(pars.
 # model-constrained with noise
 # mcn_params = unpickle_params('Network/Best_wave1d_noise_0.02dt_train-test_' + str(dt) + '-' + str(dt_test) + '_seq_n_mc_' + str(n_seq_mc) +'_forward_mc_train_d' + str(num_train) + '_alpha_' + str(1e5) + '_lr_' + str(learning_rate) + '_batch_' + str(batch_size) + '_nseq_' + str(n_seq) + '_layer_' + str(layers) + 'neurons' + str(units) + '_epochs_' + '50000')
 
+# foward solver
+dt = pars.dt
+dx = pars.dx
+velo = pars.u
+def single_solve_forward(un):
+    # use different difference schemes for edge case
+    lu = len(un)
+    u = un + velo * (- dt / dx * (jnp.roll(un, -1) - jnp.roll(un, 1)) / 2 )
+    uleft = un[0] + velo * (dt / dx / 2 * (3*un[0] - 4*un[1] + un[2]))
+    uright = un[lu-1] + velo * (dt / -dx / 2 * (3*un[lu-1] - 4*un[lu-2] + un[lu-3]))
+    u = u.at[0].set(uleft)
+    u = u.at[lu-1].set(uright)
+    return u
+
+@jit
+def forward_solver(U_test):
+
+    u = U_test[0, :]
+
+    U = jnp.zeros((pars.nt_test_data + 1, N))
+    U = U.at[0, :].set(u)
+
+    for i in range(1, pars.nt_test_data + 1):
+        u = single_solve_forward(u)
+        U = U.at[i, :].set(u)
+
+    return U
+
+forward_solver_batch = vmap(forward_solver, in_axes=(0))
 
 # from network_dense_wave import *
-dt = pars.dt
 def ReLU(x):
     """ Rectified Linear Unit (ReLU) activation function """
     return jnp.maximum(0, x)
@@ -117,11 +145,13 @@ if input_noise:
     U_mc = neural_solver_batch(mc_params, truth_noise)[plot_sample, :, :]
     # U_noisy = neural_solver_batch(noisy_params, truth_noise)[plot_sample, :, :]
     # U_mcn = neural_solver_batch(mcn_params, truth_noise)[plot_sample, :, :]
+    U_fwd = forward_solver_batch(truth_noise)[plot_sample, :, :]
 else:
     U_d_only = neural_solver_batch(d_only_params, truth)[plot_sample, :, :]
     U_mc = neural_solver_batch(mc_params, truth)[plot_sample, :, :]
     # U_noisy = neural_solver_batch(noisy_params, truth)[plot_sample, :, :]
     # U_mcn = neural_solver_batch(mcn_params, truth)[plot_sample, :, :]
+    U_fwd = forward_solver_batch(truth)[plot_sample, :, :]
 
 fontsize = 4
 fig = plt.figure(figsize=((pars.n_plot+1)*fontsize,fontsize), dpi=400)
