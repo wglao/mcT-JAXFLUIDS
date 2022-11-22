@@ -29,11 +29,17 @@ from jaxfluids.post_process import load_data, create_lineplot
 
 # initialize physic parameters
 # initialize parameters
+mc_flag = False
+noise_flag = False
+
 import mcT_parameters as pars
+
+mc_alpha = 1e5 if mc_flag else 0
+noise_level = 0.02 if noise_flag else 0
 
 # ? Step 0.2 - Uploading wandb
 problem = 'linearadvection'
-filename = problem + '_seq_n_mc_' + str(pars.n_seq_mc) +'_forward_mc_train_d' + str(pars.num_train) + '_alpha_' + str(pars.mc_alpha) + '_lr_' + str(pars.learning_rate) + '_batch_' + str(pars.batch_size) + '_nseq_' + str(pars.n_seq) + '_layer_' + str(pars.layers) + 'neurons' + str(pars.units) + '_epochs_' + str(pars.num_epochs)
+filename = problem + '_seq_n_mc_' + str(pars.n_seq_mc) +'_forward_mc_train_d' + str(pars.num_train) + '_alpha_' + str(mc_alpha) + '_lr_' + str(pars.learning_rate) + '_batch_' + str(pars.batch_size) + '_nseq_' + str(pars.n_seq) + '_layer_' + str(pars.layers) + 'neurons' + str(pars.units) + '_epochs_' + str(pars.num_epochs)
 
 wandb.init(project="mcT-JAXFluids")
 wandb.config.problem = problem
@@ -71,7 +77,9 @@ for ii, run in enumerate(train_runs):
 
 print(Train_data.shape)
 
-if pars.noise_level > 0:
+
+
+if noise_level > 0:
     ns, nt, nx = Train_data.shape
     noise_vec = jax.random.normal(pars.key_data_noise, Train_data.shape)
     for ii in range(ns):
