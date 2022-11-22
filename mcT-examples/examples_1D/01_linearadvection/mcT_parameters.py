@@ -24,6 +24,7 @@ num_test = 100
 n_seq = 1
 n_seq_mc = 1
 
+noise_level = 0.02
 mc_alpha = 1e5
 learning_rate = 1e-4
 layers = 1

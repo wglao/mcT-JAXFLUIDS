@@ -71,6 +71,13 @@ for ii, run in enumerate(train_runs):
 
 print(Train_data.shape)
 
+if pars.noise_level > 0:
+    ns, nt, nx = Train_data.shape
+    noise_vec = jax.random.normal(pars.key_data_noise, Train_data.shape)
+    for ii in range(ns):
+        for jj in range(nt):
+                Train_data[ii,jj,:] = Train_data[ii,jj,:] + pars.noise_level * noise_vec[ii,jj,:] * np.max(Train_data[ii,jj,:])
+
 Test_data = np.zeros((pars.num_test_samples, pars.nt_test_data+1, pars.N))
 test_path = 'data/test'
 test_runs = os.listdir(test_path)
