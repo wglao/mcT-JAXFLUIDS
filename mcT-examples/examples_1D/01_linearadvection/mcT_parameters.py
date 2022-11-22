@@ -24,7 +24,7 @@ num_test = 100
 n_seq = 1
 n_seq_mc = 1
 
-mc_alpha = 0
+mc_alpha = 1e5
 learning_rate = 1e-4
 layers = 1
 batch_size = 40
@@ -50,4 +50,4 @@ w = 0
 
 n_plot = 3
 # Plot_Steps = [0, 50, 100, 200, 500]
-Plot_Steps = lambda nt_test_data: np.linspace(0, nt_test_data, n_plot, dtype=int)
+Plot_Steps = np.linspace(0, nt_test_data, n_plot, dtype=int)
