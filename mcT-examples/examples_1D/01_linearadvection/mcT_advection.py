@@ -188,7 +188,7 @@ def loss_one_sample_one_time(params, u):
 
     # first step prediction
 
-    u_ml = single_forward_pass(pars.dt, params, u[0, :])
+    u_ml = single_forward_pass(params, u[0, :])
 
     # for the following steps up to sequential steps n_seq
     loss_ml,loss_mc, u_ml, _, _ = lax.fori_loop(1, pars.n_seq+1, squential_ml_second_phase, (loss_ml, loss_mc, u_ml, u, params))
@@ -230,8 +230,7 @@ def neural_solver(params, U_test):
     U = U.at[0, :].set(u)
 
     for i in range(1, pars.nt_test_data + 1):
-        dt = Test_dt[i-1]
-        u = single_forward_pass(dt, params, u)
+        u = single_forward_pass(params, u)
         U = U.at[i, :].set(u)
 
     return U

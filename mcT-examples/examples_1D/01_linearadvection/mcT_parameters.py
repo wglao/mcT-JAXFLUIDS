@@ -24,7 +24,7 @@ num_test = 100
 n_seq = 1
 n_seq_mc = 1
 
-mc_alpha = 1e5
+mc_alpha = 0
 learning_rate = 1e-4
 layers = 1
 batch_size = 40
