@@ -141,23 +141,24 @@ neural_solver_batch = vmap(neural_solver, in_axes=(None, 0))
 plot_sample = 75
 U_true = truth[plot_sample, :, :]
 if input_noise:
+    U_fwd = forward_solver_batch(truth_noise)[plot_sample, :, :]
     U_d_only = neural_solver_batch(d_only_params, truth_noise)[plot_sample, :, :]
     U_mc = neural_solver_batch(mc_params, truth_noise)[plot_sample, :, :]
     # U_noisy = neural_solver_batch(noisy_params, truth_noise)[plot_sample, :, :]
     # U_mcn = neural_solver_batch(mcn_params, truth_noise)[plot_sample, :, :]
-    U_fwd = forward_solver_batch(truth_noise)[plot_sample, :, :]
 else:
+    U_fwd = forward_solver_batch(truth)[plot_sample, :, :]
     U_d_only = neural_solver_batch(d_only_params, truth)[plot_sample, :, :]
     U_mc = neural_solver_batch(mc_params, truth)[plot_sample, :, :]
     # U_noisy = neural_solver_batch(noisy_params, truth)[plot_sample, :, :]
     # U_mcn = neural_solver_batch(mcn_params, truth)[plot_sample, :, :]
-    U_fwd = forward_solver_batch(truth)[plot_sample, :, :]
 
 fontsize = 4
 fig = plt.figure(figsize=((pars.n_plot+1)*fontsize,fontsize), dpi=400)
 plt.rcParams.update({'font.size': fontsize})
 for i in range(pars.n_plot):
 
+    uf = jnp.reshape(U_fwd[pars.Plot_Steps[i], :], (N, 1))
     ut = jnp.reshape(U_true[pars.Plot_Steps[i], :], (N, 1))
     ud = jnp.reshape(U_d_only[pars.Plot_Steps[i], :], (N, 1))
     um = jnp.reshape(U_mc[pars.Plot_Steps[i], :], (N, 1))
@@ -165,11 +166,13 @@ for i in range(pars.n_plot):
     # umn = jnp.reshape(U_mc[Plot_Steps[i], :], (N, 1))
     
     ax = fig.add_subplot(1, pars.n_plot, i+1)
+    l0 = ax.plot(x, ud, '-k', linewidth=1.5, label='Forward solver')
     l1 = ax.plot(x, ut, '-', linewidth=1.5, label='True')
     l2 = ax.plot(x, ud, ':o', markevery=5, fillstyle='none', linewidth=1.5, label='Data only')
     l3 = ax.plot(x, um, ':v', markevery=5, fillstyle='none', linewidth=1.5, label='Model constrained (1e5)')
     # l4 = ax.plot(x, un, ':x', markevery=5, linewidth=1.5, label='With noise (0.02)')
     # l5 = ax.plot(x, umn, ':+', markevery=5, linewidth=1.5, label='Model constrained (1e5) and with noise (0.02)')
+
 
     # ax.set_aspect('auto', adjustable='box')
     # ax.set_xticks([])
