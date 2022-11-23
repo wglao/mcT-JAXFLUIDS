@@ -17,7 +17,7 @@ num_train_samples = 200
 num_test_samples = 100
 
 # Training inputs
-num_train = 200
+num_train = 100
 num_test = 100
 
 
