@@ -38,18 +38,19 @@ num_epochs = int(3e4)
 
 facdt = 1
 
+u = 1.0
+v = 0
+w = 0
+
 T = 2.0
 Nt = 1000
 dt = T / Nt
 nt_train_data = 100
 nt_test_data = 100
-N = 200
-x_max = 2.0
+N = Nt*0.9
+x_max = u*T
 dx = x_max / N
 
-u = 1.0
-v = 0
-w = 0
 
 n_plot = 3
 # Plot_Steps = [0, 50, 100, 200, 500]
