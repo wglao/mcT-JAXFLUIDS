@@ -5,6 +5,10 @@ def FTCS(un, velo, dt, dx):
     u = un - velo * dt / dx * (jnp.roll(un, -1) - jnp.roll(un, 1)) / 2
     return u
 
+def Upwind(un, velo, dt, dx):
+    u = un - velo * dt / dx * (un - jnp.roll(un, -1))
+    return u
+
 def MacCormack(un, velo, dt, dx):
     u = un - velo*dt/dx * (jnp.roll(un, -1) - jnp.roll(un, 1) / 2) \
            + (velo*dt/dx)**2 * (jnp.roll(un, -1) - 2*un + jnp.roll(un, 1) / 2)
