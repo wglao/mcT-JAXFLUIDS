@@ -47,7 +47,7 @@ Nt = 1000
 dt = T / Nt
 nt_train_data = 100
 nt_test_data = 100
-N = Nt*0.9
+N = int(Nt*0.9)
 x_max = u*T
 dx = x_max / N
 
