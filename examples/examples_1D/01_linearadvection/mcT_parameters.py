@@ -13,7 +13,7 @@ key_data_test_b = random.PRNGKey(4)
 key_data_noise = random.PRNGKey(5)
 
 # Generate_data_initilizers
-num_train_samples = 200
+num_train_samples = 100
 num_test_samples = 100
 
 # Training inputs
