@@ -6,7 +6,6 @@ def FTCS(un, velo, dt, dx):
     return u
 
 def MacCormack(un, velo, dt, dx):
-    u1 = un - velo * dt / dx * (jnp.roll(un, 1) - un)
-    u2 = un - velo * dt / dx * (u1 - jnp.roll(u1, -1))
-    u = (u1 + u2) / 2
+    u = un - velo*dt/dx * (jnp.roll(un, -1) - jnp.roll(un, 1) / 2) \
+           + (velo*dt/dx)**2 * (jnp.roll(un, -1) - 2*un + jnp.roll(un, 1) / 2)
     return u
