@@ -17,10 +17,11 @@ from jax.example_libraries import stax, optimizers
 import time
 import pickle
 import h5py
-import re
 
 from jaxfluids import InputReader, Initializer, SimulationManager
 from jaxfluids.post_process import load_data, create_lineplot
+
+import mcT_forward_schemes_1D as mctf
 
 # from jax.config import config
 # config.update("jax_enable_x64", True)
@@ -144,13 +145,8 @@ dx = pars.dx
 velo = pars.u
 #! Step 3: Forward solver (single time step)
 def single_solve_forward(un):
-    # use different difference schemes for edge case
-    lu = len(un)
-    u = un + velo * (- dt / dx * (jnp.roll(un, -1) - jnp.roll(un, 1)) / 2 )
-    uleft = un[0] + velo * (dt / dx / 2 * (3*un[0] - 4*un[1] + un[2]))
-    uright = un[lu-1] + velo * (dt / -dx / 2 * (3*un[lu-1] - 4*un[lu-2] + un[lu-3]))
-    u = u.at[0].set(uleft)
-    u = u.at[lu-1].set(uright)
+    # u = mctf.FTCS(un, velo, dt, dx)
+    u = mctf.MacCormack(un, velo, dt, dx)
     return u
 
 #@jit
@@ -344,8 +340,8 @@ def plot_compare(U_True, U_Pred, filename):
         l1 = ax.plot(x, ut, '-', linewidth=2, label='True')
         l2 = ax.plot(x, up, '--', linewidth=2, label='Predicted')
         ax.set_aspect('auto', adjustable='box')
-        ax.set_xticks([])
-        ax.set_yticks([])
+        # ax.set_xticks([])
+        # ax.set_yticks([])
         ax.set_title('t = ' + str(pars.Plot_Steps[i]))
 
         if i == 1:
