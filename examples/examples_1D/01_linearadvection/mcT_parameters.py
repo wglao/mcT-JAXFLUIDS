@@ -32,7 +32,7 @@ batch_size = 40
 
 units = 5000
 
-num_epochs = int(3e4)
+num_epochs = int(1e6)
 
 facdt = 1
 
