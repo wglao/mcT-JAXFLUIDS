@@ -30,13 +30,13 @@ import mcT_forward_schemes_1D as mctf
 
 # initialize physic parameters
 # initialize parameters
-mc_flag = True
-noise_flag = True
+mc_flag = False
+noise_flag = False
 
 import mcT_parameters as pars
 
-mc_alpha = 1e5 if mc_flag else 0
-noise_level = 0.02 if noise_flag else 0
+mc_alpha = pars.mc_alpha if mc_flag else 0
+noise_level = pars.noise_level if noise_flag else 0
 
 # ? Step 0.2 - Uploading wandb
 problem = 'linearadvection'
