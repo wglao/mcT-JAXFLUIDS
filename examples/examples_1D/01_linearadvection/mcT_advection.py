@@ -30,8 +30,8 @@ import mcT_forward_schemes_1D as mctf
 
 # initialize physic parameters
 # initialize parameters
-mc_flag = False
-noise_flag = False
+mc_flag = True
+noise_flag = True
 
 import mcT_parameters as pars
 
@@ -86,7 +86,7 @@ if noise_flag:
     noise_vec = jax.random.normal(pars.key_data_noise, Train_data.shape)
     for ii in range(ns):
         for jj in range(nt):
-                Train_data[ii,jj,:] = Train_data[ii,jj,:] + pars.noise_level * noise_vec[ii,jj,:] * np.max(Train_data[ii,jj,:])
+                Train_data[ii,jj,:] = Train_data[ii,jj,:] + noise_level * noise_vec[ii,jj,:] * np.max(Train_data[ii,jj,:])
 
 Test_data = np.zeros((pars.num_test_samples, pars.nt_test_data+1, pars.N))
 test_path = 'data/test'
