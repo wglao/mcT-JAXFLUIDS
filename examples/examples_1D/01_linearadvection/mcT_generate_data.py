@@ -29,8 +29,8 @@ if 'fixed_timestep' not in list(num_setup['conservatives']['time_integration'].k
     f.close()
 
 def generate(run_type):
-    a_arr = np.array()
-    b_arr = np.array()
+    a_arr = np.array([])
+    b_arr = np.array([])
     num_samples = 0
 
     f = open('linearadvection.json', 'r+')
@@ -57,12 +57,25 @@ def generate(run_type):
     for iii in range(num_samples):
 
         # randomize initial conditions
-        setup['initial_condition']['rho'] = "lambda x: 1 + 0.1*(" +\
-            str(a_arr[iii,0]) + "*np.sin(2*np.pi*x*" + str(a_arr[iii,0]) + "/" + str(pars.x_max) + ")**2 + " + str(b_arr[iii,0]) + "*np.sin(2*np.pi*x*" + str(b_arr[iii,0]) + "/" + str(pars.x_max) + ")**2 + " +\
-            str(a_arr[iii,1]) + "*np.sin(2*np.pi*x*" + str(a_arr[iii,1]) + "/" + str(pars.x_max) + ")**2 + " + str(b_arr[iii,1]) + "*np.sin(2*np.pi*x*" + str(b_arr[iii,1]) + "/" + str(pars.x_max) + ")**2 + " +\
-            str(a_arr[iii,2]) + "*np.sin(2*np.pi*x*" + str(a_arr[iii,2]) + "/" + str(pars.x_max) + ")**2 + " + str(b_arr[iii,2]) + "*np.sin(2*np.pi*x*" + str(b_arr[iii,2]) + "/" + str(pars.x_max) + ")**2 + " +\
-            str(a_arr[iii,3]) + "*np.sin(2*np.pi*x*" + str(a_arr[iii,3]) + "/" + str(pars.x_max) + ")**2 + " + str(b_arr[iii,3]) + "*np.sin(2*np.pi*x*" + str(b_arr[iii,3]) + "/" + str(pars.x_max) + ")**2 + " +\
-            str(a_arr[iii,4]) + "*np.sin(2*np.pi*x*" + str(a_arr[iii,4]) + "/" + str(pars.x_max) + ")**2 + " + str(b_arr[iii,4]) + "*np.sin(2*np.pi*x*" + str(b_arr[iii,4]) + "/" + str(pars.x_max) + ")**2)"
+        # random sines
+        # setup['initial_condition']['rho'] = "lambda x: 1 + 0.1*(" +\
+        #     str(a_arr[iii,0]) + "*np.sin(2*np.pi*x*" + str(a_arr[iii,0]) + "/" + str(pars.x_max) + ")**2 + " + str(b_arr[iii,0]) + "*np.sin(2*np.pi*x*" + str(b_arr[iii,0]) + "/" + str(pars.x_max) + ")**2 + " +\
+        #     str(a_arr[iii,1]) + "*np.sin(2*np.pi*x*" + str(a_arr[iii,1]) + "/" + str(pars.x_max) + ")**2 + " + str(b_arr[iii,1]) + "*np.sin(2*np.pi*x*" + str(b_arr[iii,1]) + "/" + str(pars.x_max) + ")**2 + " +\
+        #     str(a_arr[iii,2]) + "*np.sin(2*np.pi*x*" + str(a_arr[iii,2]) + "/" + str(pars.x_max) + ")**2 + " + str(b_arr[iii,2]) + "*np.sin(2*np.pi*x*" + str(b_arr[iii,2]) + "/" + str(pars.x_max) + ")**2 + " +\
+        #     str(a_arr[iii,3]) + "*np.sin(2*np.pi*x*" + str(a_arr[iii,3]) + "/" + str(pars.x_max) + ")**2 + " + str(b_arr[iii,3]) + "*np.sin(2*np.pi*x*" + str(b_arr[iii,3]) + "/" + str(pars.x_max) + ")**2 + " +\
+        #     str(a_arr[iii,4]) + "*np.sin(2*np.pi*x*" + str(a_arr[iii,4]) + "/" + str(pars.x_max) + ")**2 + " + str(b_arr[iii,4]) + "*np.sin(2*np.pi*x*" + str(b_arr[iii,4]) + "/" + str(pars.x_max) + ")**2)"
+
+        # random deltas
+        a1 = str(np.abs(a_arr[iii,0]))
+        a2 = str(np.abs(a_arr[iii,1]))
+        a3 = str(np.abs(a_arr[iii,2]))
+        a4 = str(np.abs(a_arr[iii,3]))
+        a5 = str(np.abs(a_arr[iii,4]))
+        b1 = str(np.abs(b_arr[iii,0]))
+        b2 = str(np.abs(b_arr[iii,1]))
+
+        setup['initial_condition']['rho'] = "lambda x: ((x>=0.2) & (x<=0.4)) * ( "+a1+"*(np.exp(-334.477 * (x-0.3-0.005)**2) + np.exp(-334.477 * (x - 0.3 + 0.005)**2) + "+a2+" * np.exp(-334.477 * (x - 0.3)**2))) + ((x>=0.6) & (x<=0.8)) * "+b1+" + "+b2+" + ((x>=1.0) & (x<=1.2)) * (1 - np.abs(10 * (x - 1.1))) + ((x>=1.4) & (x<=1.6)) * ("+a3+"*(np.sqrt(np.maximum( 1 - 100 * (x - 1.5 - 0.005)**2, 0)) + "+a4+"*np.sqrt(np.maximum( 1 - 100 * (x - 1.5 + 0.005)**2, 0)) + "+a5+"*np.sqrt(np.maximum( 1 - 100 * (x - 1.5)**2, 0))) ) + ~( ((x>=0.2) & (x<=0.4)) | ((x>=0.6) & (x<=0.8)) | ((x>=1.0) & (x<=1.2)) | ((x>=1.4) & (x<=1.6)) ) * 0.01"
+
 
         f = open('next_run.json', 'w+')
         json.dump(setup, f, indent=4)

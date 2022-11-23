@@ -9,6 +9,8 @@ from jax import vmap, jit
 import jax.numpy as jnp
 from jax.example_libraries import stax, optimizers
 
+import mcT_forward_schemes_1D as mctf
+
 # get current parameters
 import mcT_parameters as pars
 
@@ -70,7 +72,7 @@ d_only_params = unpickle_params('Network/Best_' + problem + '_seq_n_mc_' + str(p
 mc_params = unpickle_params('Network/Best_' + problem + '_seq_n_mc_' + str(pars.n_seq_mc) +'_forward_mc_train_d' + str(pars.num_train) + '_alpha_' + str(pars.mc_alpha) + '_lr_' + str(pars.learning_rate) + '_batch_' + str(pars.batch_size) + '_nseq_' + str(pars.n_seq) + '_layer_' + str(pars.layers) + 'neurons' + str(pars.units) + '_epochs_' + str(pars.num_epochs))
 
 # with noise
-# noisy_params = unpickle_params('Network/Best_wave1d_noise_0.02_dt_train-test_' + str(dt) + '-' + str(dt_test) + '_seq_n_mc_' + str(n_seq_mc) +'_forward_mc_train_d' + str(num_train) + '_alpha_0_lr_' + str(learning_rate) + '_batch_' + str(batch_size) + '_nseq_' + str(n_seq) + '_layer_' + str(layers) + 'neurons' + str(units) + '_epochs_' + str(num_epochs))
+noisy_params = unpickle_params('Network/Best_' + problem + '_noise_' + str(pars.noise_level) + '_seq_n_mc_' + str(pars.n_seq_mc) +'_forward_mc_train_d' + str(pars.num_train) + '_alpha_0_lr_' + str(pars.learning_rate) + '_batch_' + str(pars.batch_size) + '_nseq_' + str(pars.n_seq) + '_layer_' + str(pars.layers) + 'neurons' + str(pars.units) + '_epochs_' + str(pars.num_epochs))
 
 # model-constrained with noise
 # mcn_params = unpickle_params('Network/Best_wave1d_noise_0.02dt_train-test_' + str(dt) + '-' + str(dt_test) + '_seq_n_mc_' + str(n_seq_mc) +'_forward_mc_train_d' + str(num_train) + '_alpha_' + str(1e5) + '_lr_' + str(learning_rate) + '_batch_' + str(batch_size) + '_nseq_' + str(n_seq) + '_layer_' + str(layers) + 'neurons' + str(units) + '_epochs_' + '50000')
@@ -80,13 +82,7 @@ dt = pars.dt
 dx = pars.dx
 velo = pars.u
 def single_solve_forward(un):
-    # use different difference schemes for edge case
-    lu = len(un)
-    u = un + velo * (- dt / dx * (jnp.roll(un, -1) - jnp.roll(un, 1)) / 2 )
-    uleft = un[0] + velo * (dt / dx / 2 * (3*un[0] - 4*un[1] + un[2]))
-    uright = un[lu-1] + velo * (dt / -dx / 2 * (3*un[lu-1] - 4*un[lu-2] + un[lu-3]))
-    u = u.at[0].set(uleft)
-    u = u.at[lu-1].set(uright)
+    u = mctf.MacCormack(un, velo, dt, dx)
     return u
 
 @jit
@@ -138,19 +134,19 @@ def neural_solver(params, U_test):
 
 neural_solver_batch = vmap(neural_solver, in_axes=(None, 0))
 
-plot_sample = 75
+plot_sample = 0
 U_true = truth[plot_sample, :, :]
 if input_noise:
     U_fwd = forward_solver_batch(truth_noise)[plot_sample, :, :]
     U_d_only = neural_solver_batch(d_only_params, truth_noise)[plot_sample, :, :]
     U_mc = neural_solver_batch(mc_params, truth_noise)[plot_sample, :, :]
-    # U_noisy = neural_solver_batch(noisy_params, truth_noise)[plot_sample, :, :]
+    U_noisy = neural_solver_batch(noisy_params, truth_noise)[plot_sample, :, :]
     # U_mcn = neural_solver_batch(mcn_params, truth_noise)[plot_sample, :, :]
 else:
     U_fwd = forward_solver_batch(truth)[plot_sample, :, :]
     U_d_only = neural_solver_batch(d_only_params, truth)[plot_sample, :, :]
     U_mc = neural_solver_batch(mc_params, truth)[plot_sample, :, :]
-    # U_noisy = neural_solver_batch(noisy_params, truth)[plot_sample, :, :]
+    U_noisy = neural_solver_batch(noisy_params, truth)[plot_sample, :, :]
     # U_mcn = neural_solver_batch(mcn_params, truth)[plot_sample, :, :]
 
 fontsize = 4
@@ -162,7 +158,7 @@ for i in range(pars.n_plot):
     ut = jnp.reshape(U_true[pars.Plot_Steps[i], :], (N, 1))
     ud = jnp.reshape(U_d_only[pars.Plot_Steps[i], :], (N, 1))
     um = jnp.reshape(U_mc[pars.Plot_Steps[i], :], (N, 1))
-    # un = jnp.reshape(U_noisy[Plot_Steps[i], :], (N, 1))
+    un = jnp.reshape(U_noisy[pars.Plot_Steps[i], :], (N, 1))
     # umn = jnp.reshape(U_mc[Plot_Steps[i], :], (N, 1))
     
     ax = fig.add_subplot(1, pars.n_plot, i+1)
@@ -170,7 +166,7 @@ for i in range(pars.n_plot):
     l1 = ax.plot(x, ut, '-', linewidth=1.5, label='True')
     l2 = ax.plot(x, ud, ':o', markevery=5, fillstyle='none', linewidth=1.5, label='Data only')
     l3 = ax.plot(x, um, ':v', markevery=5, fillstyle='none', linewidth=1.5, label='Model constrained (1e5)')
-    # l4 = ax.plot(x, un, ':x', markevery=5, linewidth=1.5, label='With noise (0.02)')
+    l4 = ax.plot(x, un, ':x', markevery=5, linewidth=1.5, label='With noise (0.02)')
     # l5 = ax.plot(x, umn, ':+', markevery=5, linewidth=1.5, label='Model constrained (1e5) and with noise (0.02)')
 
 
