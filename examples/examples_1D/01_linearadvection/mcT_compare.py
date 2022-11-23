@@ -1,5 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import animation
+from matplotlib import backend_bases as back
 import pandas as pd
 import os
 import h5py
@@ -15,7 +17,7 @@ import mcT_forward_schemes_1D as mctf
 import mcT_parameters as pars
 
 N = pars.N
-x = np.linspace(0, 1, N)
+x = np.linspace(0, 2, N)
 
 # gound truth solution
 truth = np.zeros((pars.num_test_samples, pars.nt_test_data+1, pars.N))
@@ -75,7 +77,7 @@ mc_params = unpickle_params('Network/Best_' + problem + '_seq_n_mc_' + str(pars.
 noisy_params = unpickle_params('Network/Best_' + problem + '_noise_' + str(pars.noise_level) + '_seq_n_mc_' + str(pars.n_seq_mc) +'_forward_mc_train_d' + str(pars.num_train) + '_alpha_0_lr_' + str(pars.learning_rate) + '_batch_' + str(pars.batch_size) + '_nseq_' + str(pars.n_seq) + '_layer_' + str(pars.layers) + 'neurons' + str(pars.units) + '_epochs_' + str(pars.num_epochs))
 
 # model-constrained with noise
-# mcn_params = unpickle_params('Network/Best_wave1d_noise_0.02dt_train-test_' + str(dt) + '-' + str(dt_test) + '_seq_n_mc_' + str(n_seq_mc) +'_forward_mc_train_d' + str(num_train) + '_alpha_' + str(1e5) + '_lr_' + str(learning_rate) + '_batch_' + str(batch_size) + '_nseq_' + str(n_seq) + '_layer_' + str(layers) + 'neurons' + str(units) + '_epochs_' + '50000')
+mcn_params = unpickle_params('Network/Best_' + problem + '_noise_' + str(pars.noise_level) + '_seq_n_mc_' + str(pars.n_seq_mc) +'_forward_mc_train_d' + str(pars.num_train) + '_alpha_' + str(pars.mc_alpha) + '_lr_' + str(pars.learning_rate) + '_batch_' + str(pars.batch_size) + '_nseq_' + str(pars.n_seq) + '_layer_' + str(pars.layers) + 'neurons' + str(pars.units) + '_epochs_' + str(pars.num_epochs))
 
 # foward solver
 dt = pars.dt
@@ -134,24 +136,27 @@ def neural_solver(params, U_test):
 
 neural_solver_batch = vmap(neural_solver, in_axes=(None, 0))
 
-plot_sample = 0
+plot_sample = 75
 U_true = truth[plot_sample, :, :]
 if input_noise:
     U_fwd = forward_solver_batch(truth_noise)[plot_sample, :, :]
     U_d_only = neural_solver_batch(d_only_params, truth_noise)[plot_sample, :, :]
     U_mc = neural_solver_batch(mc_params, truth_noise)[plot_sample, :, :]
     U_noisy = neural_solver_batch(noisy_params, truth_noise)[plot_sample, :, :]
-    # U_mcn = neural_solver_batch(mcn_params, truth_noise)[plot_sample, :, :]
+    U_mcn = neural_solver_batch(mcn_params, truth_noise)[plot_sample, :, :]
 else:
     U_fwd = forward_solver_batch(truth)[plot_sample, :, :]
     U_d_only = neural_solver_batch(d_only_params, truth)[plot_sample, :, :]
     U_mc = neural_solver_batch(mc_params, truth)[plot_sample, :, :]
     U_noisy = neural_solver_batch(noisy_params, truth)[plot_sample, :, :]
-    # U_mcn = neural_solver_batch(mcn_params, truth)[plot_sample, :, :]
+    U_mcn = neural_solver_batch(mcn_params, truth)[plot_sample, :, :]
+
+u_solutions = np.array([U_fwd, U_d_only, U_mc, U_noisy, U_mcn])
 
 fontsize = 4
 fig = plt.figure(figsize=((pars.n_plot+1)*fontsize,fontsize), dpi=400)
 plt.rcParams.update({'font.size': fontsize})
+
 for i in range(pars.n_plot):
 
     uf = jnp.reshape(U_fwd[pars.Plot_Steps[i], :], (N, 1))
@@ -159,7 +164,7 @@ for i in range(pars.n_plot):
     ud = jnp.reshape(U_d_only[pars.Plot_Steps[i], :], (N, 1))
     um = jnp.reshape(U_mc[pars.Plot_Steps[i], :], (N, 1))
     un = jnp.reshape(U_noisy[pars.Plot_Steps[i], :], (N, 1))
-    # umn = jnp.reshape(U_mc[Plot_Steps[i], :], (N, 1))
+    umn = jnp.reshape(U_mc[pars.Plot_Steps[i], :], (N, 1))
     
     ax = fig.add_subplot(1, pars.n_plot, i+1)
     l0 = ax.plot(x, ud, '-k', linewidth=1.5, label='Forward solver')
@@ -167,7 +172,7 @@ for i in range(pars.n_plot):
     l2 = ax.plot(x, ud, ':o', markevery=5, fillstyle='none', linewidth=1.5, label='Data only')
     l3 = ax.plot(x, um, ':v', markevery=5, fillstyle='none', linewidth=1.5, label='Model constrained (1e5)')
     l4 = ax.plot(x, un, ':x', markevery=5, linewidth=1.5, label='With noise (0.02)')
-    # l5 = ax.plot(x, umn, ':+', markevery=5, linewidth=1.5, label='Model constrained (1e5) and with noise (0.02)')
+    l5 = ax.plot(x, umn, ':+', markevery=5, linewidth=1.5, label='Model constrained (1e5) and with noise (0.02)')
 
 
     # ax.set_aspect('auto', adjustable='box')
@@ -179,8 +184,45 @@ for i in range(pars.n_plot):
         handles, labels = ax.get_legend_handles_labels()
         fig.legend(handles, labels, loc='center right')
 
+handles, labels = ax.get_legend_handles_labels()
+
 if input_noise:
     plt.savefig('figs/compare_'+ problem + '_noise.png', bbox_inches='tight')
 else:
     plt.savefig('figs/compare_'+ problem + '.png', bbox_inches='tight')
-# plt.show()
+
+plt.close()
+fig = plt.figure()
+ax = plt.axes(xlim=(min(x),max(x)), ylim=(np.min(u_solutions)*0.9,np.max(u_solutions)*1.1))
+
+# animation function.  This is called sequentially
+lines=[]     # list for plot lines for solvers and analytical solutions
+legends=labels   # list for legends for solvers and analytical solutions
+
+for ii in range(6):
+    line, = ax.plot([], [])
+    lines.append(line)
+
+plt.xlabel('x-coordinate [-]')
+plt.ylabel('Amplitude [-]')
+plt.legend(legends, loc=3, frameon=False)
+
+def init_lines():
+    for line in lines:
+        line.set_data([], [])
+    return lines,
+
+def animate_alt(i):
+    for k, line in enumerate(lines):
+        if (k==len(lines)-1):
+            line.set_data(x, U_true[i,:])
+        else:
+            line.set_data(x, u_solutions[k,i,:])
+    return lines,
+
+ 
+# call the animator.  blit=True means only re-draw the parts that have changed.
+anim = animation.FuncAnimation(fig, animate_alt, init_func=init_lines, frames=pars.nt_test_data, interval=100, blit=False)
+
+ 
+plt.show()
