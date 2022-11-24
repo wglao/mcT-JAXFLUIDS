@@ -142,7 +142,6 @@ print('=' * 20 + ' >> Success!')
 
 dt = pars.dt
 dx = pars.dx
-velo = pars.u
 #! Step 3: Forward solver (single time step)
 def single_solve_forward(un):
     # u = mctf.FTCS(un, velo, dt, dx)     # FTCS is unconditionally unstable for hyperbolic pde (advection)
