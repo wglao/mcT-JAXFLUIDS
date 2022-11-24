@@ -1,22 +1,31 @@
 {
     "general": {
         "case_name": "sod",
-        "save_path": "./results",
+        "save_path": "./data/train",
         "end_time": 0.2,
-        "save_dt": 0.01
+        "save_dt": 0.0002
     },
     "domain": {
         "x": {
-            "cells": 100,
-            "range": [0.0, 1.0]
+            "cells": 4500,
+            "range": [
+                0.0,
+                1.0
+            ]
         },
         "y": {
             "cells": 1,
-            "range": [0.0, 1.0]
+            "range": [
+                0.0,
+                1.0
+            ]
         },
         "z": {
             "cells": 1,
-            "range": [0.0, 1.0]
+            "range": [
+                0.0,
+                1.0
+            ]
         }
     },
     "boundary_condition": {
@@ -30,11 +39,11 @@
         }
     },
     "initial_condition": {
-        "rho": "lambda x: 1.0*(x <= 0.5) + 0.125*(x > 0.5)",
+        "rho": "lambda x: 2.3600214*(x <= 0.24984606) + 0.99610883*(x > 2.3600214)",
         "u": 0.0,
         "v": 0.0,
         "w": 0.0,
-        "p": "lambda x: 1.0*(x <= 0.5) + 0.1*(x > 0.5)"
+        "p": "lambda x: 1.3855346*(x <= 0.38002262) + 0.54303646*(x > 1.3855346)"
     },
     "material_properties": {
         "type": "IdealGas",
@@ -50,5 +59,4 @@
         "velocity_reference": 1.0,
         "temperature_reference": 1.0
     }
-
 }

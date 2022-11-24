@@ -33,7 +33,7 @@ def generate(run_type):
     b_arr = np.array([])
     num_samples = 0
 
-    f = open('linearadvection.json', 'r+')
+    f = open('sod.json', 'r+')
     setup = json.load(f)
     f.close()
 
@@ -41,7 +41,6 @@ def generate(run_type):
     setup['general']['save_dt'] = pars.dt
     setup['domain']['x']['range'] = [0.0, pars.x_max]
     setup['domain']['x']['cells'] = pars.N
-    setup['initial_condition']['u'] = pars.u
 
     if run_type == 'train':
         setup['general']['save_path'] = "./data/train"
@@ -67,12 +66,12 @@ def generate(run_type):
         setup['initial_condition']['rho'] = "lambda x: "+a1+"*(x <= "+a2+") + "+a3+"*(x > "+a1+")"
         setup['initial_condition']['p'] = "lambda x: "+b1+"*(x <= "+b2+") + "+b3+"*(x > "+b1+")"
 
-        f = open('linearadvection.json', 'w+')
+        f = open('sod.json', 'w+')
         json.dump(setup, f, indent=4)
         f.close()
 
         # don't need sim return because data is not being plotted
-        _, initializer, sim_manager = run.setup("linearadvection.json", "numerical_setup.json")
+        _, initializer, sim_manager = run.setup("sod.json", "numerical_setup.json")
         _,_ = run.sim(initializer, sim_manager)
 
 # training sets

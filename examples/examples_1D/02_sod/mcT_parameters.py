@@ -40,14 +40,15 @@ u = 0
 v = 0
 w = 0
 
-T = 2.0
+c = 0.9
+T = 0.2
 Nt = 1000
 dt = T / Nt
 nt_train_data = 100
 nt_test_data = 1000
-N = int(Nt*0.9)
-x_max = u*T
-dx = x_max / N
+x_max = 1.0
+dx = dt / c
+N = int(x_max / dx)
 
 
 n_plot = 3

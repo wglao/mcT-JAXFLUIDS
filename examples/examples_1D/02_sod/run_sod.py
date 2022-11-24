@@ -23,7 +23,7 @@ def load(sim_manager):
     return cell_centers, cell_sizes, times, data_dict
 
 # PLOT
-def plot(cell_centers, cell_sizes, times, data_dict):
+def plot(cell_centers, times, data_dict):
     nrows_ncols = (1,3)
     create_lineplot(data_dict, cell_centers, times, nrows_ncols=nrows_ncols, interval=100)
 
