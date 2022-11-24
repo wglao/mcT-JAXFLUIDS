@@ -55,8 +55,9 @@ if input_noise:
         for j in range(nt):
                 truth_noise[i,j,:] = truth[i,j,:] + noise_level * nosie_vec[i,j,:] * np.max(truth[i,j,:])
     
-    plt.plot(x, truth[0,0,:])
-    plt.plot(x, truth_noise[0,0,:])
+    plt.plot(x, truth[0,0,:], label = 'true')
+    plt.plot(x, truth_noise[0,0,:], '--', label = 'noise added')
+    plt.legend()
     plt.show()
 
 _, _, opt_get_params = optimizers.adam(pars.learning_rate)
@@ -221,9 +222,9 @@ def init_lines():
 def animate_alt(i):
     for k, line in enumerate(lines):
         if (k==0):
-            line.set_ydata(U_true[i,:])
+            line.set_data(x, U_true[i,:])
         else:
-            line.set_ydata(u_solutions[k-1,i,:])
+            line.set_data(x, u_solutions[k-1,i,:])
     return lines,
 
  
