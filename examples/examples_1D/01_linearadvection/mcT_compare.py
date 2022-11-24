@@ -44,7 +44,7 @@ for ii, run in enumerate(test_runs):
 print(truth.shape)
 
 # randomized initial condition
-input_noise = True
+input_noise = False
 if input_noise:
     ns, nt, nx = truth.shape
     nosie_vec = jax.random.normal(pars.key_data_noise, truth.shape)
@@ -164,7 +164,7 @@ plt.ylabel('density')
 
 for i in range(pars.n_plot):
 
-    ut = jnp.reshape(U_true[pars.Plot_Steps[i], :], (N, 1))
+    # ut = jnp.reshape(U_true[pars.Plot_Steps[i], :], (N, 1))
     uf = jnp.reshape(U_fwd[pars.Plot_Steps[i], :], (N, 1))
     ud = jnp.reshape(U_d_only[pars.Plot_Steps[i], :], (N, 1))
     um = jnp.reshape(U_mc[pars.Plot_Steps[i], :], (N, 1))
@@ -172,12 +172,12 @@ for i in range(pars.n_plot):
     umn = jnp.reshape(U_mcn[pars.Plot_Steps[i], :], (N, 1))
     
     ax = fig.add_subplot(1, pars.n_plot, i+1)
-    l1 = ax.plot(x, ut, '-k', linewidth=1.5, label='True')
-    l0 = ax.plot(x, uf, '-', linewidth=1.5, label='Forward solver')
+    # l0 = ax.plot(x, ut, '-k', linewidth=1.5, label='True')
+    l1 = ax.plot(x, uf, '-', linewidth=1.5, label='Forward solver')
     l2 = ax.plot(x, ud, ':', linewidth=1, label='Data only')
-    l3 = ax.plot(x, um, ':o', fillstyle='none', markevery=0.1, linewidth=1, label='Model constrained (1e5)')
+    l3 = ax.plot(x, um, ':.', markevery=0.1, linewidth=1, label='Model constrained (1e5)')
     l4 = ax.plot(x, un, '--', linewidth=1, label='With noise (0.02)')
-    l5 = ax.plot(x, umn, '--o', fillstyle='none', markevery=(0.1,0.05), linewidth=1, label='Model constrained (1e5) and with noise (0.02)')
+    l5 = ax.plot(x, umn, '--.', markevery=(0.05,0.1), linewidth=1, label='Model constrained (1e5) and with noise (0.02)')
 
 
     # ax.set_aspect('auto', adjustable='box')
