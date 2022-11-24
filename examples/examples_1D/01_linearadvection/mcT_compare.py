@@ -168,15 +168,15 @@ for i in range(pars.n_plot):
     ud = jnp.reshape(U_d_only[pars.Plot_Steps[i], :], (N, 1))
     um = jnp.reshape(U_mc[pars.Plot_Steps[i], :], (N, 1))
     un = jnp.reshape(U_noisy[pars.Plot_Steps[i], :], (N, 1))
-    umn = jnp.reshape(U_mc[pars.Plot_Steps[i], :], (N, 1))
+    umn = jnp.reshape(U_mcn[pars.Plot_Steps[i], :], (N, 1))
     
     ax = fig.add_subplot(1, pars.n_plot, i+1)
     l1 = ax.plot(x, ut, '-k', linewidth=1.5, label='True')
     l0 = ax.plot(x, ud, '-', linewidth=1.5, label='Forward solver')
-    l2 = ax.plot(x, ud, ':', markevery=5, fillstyle='none', linewidth=1, label='Data only')
-    l3 = ax.plot(x, um, ':', markevery=5, fillstyle='none', linewidth=1, label='Model constrained (1e5)')
-    l4 = ax.plot(x, un, ':', markevery=5, linewidth=1, label='With noise (0.02)')
-    l5 = ax.plot(x, umn, ':', markevery=5, linewidth=1, label='Model constrained (1e5) and with noise (0.02)')
+    l2 = ax.plot(x, ud, ':', fillstyle='none', linewidth=1, label='Data only')
+    l3 = ax.plot(x, um, ':', fillstyle='none', linewidth=1, label='Model constrained (1e5)')
+    l4 = ax.plot(x, un, ':', linewidth=1, label='With noise (0.02)')
+    l5 = ax.plot(x, umn, ':', linewidth=1, label='Model constrained (1e5) and with noise (0.02)')
 
 
     # ax.set_aspect('auto', adjustable='box')
