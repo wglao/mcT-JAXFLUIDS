@@ -204,7 +204,7 @@ ax = plt.axes(xlim=(min(x),max(x)), ylim=(np.min(u_solutions)*0.9,np.max(u_solut
 lines=[]     # list for plot lines for solvers and analytical solutions
 legends=labels   # list for legends for solvers and analytical solutions
 
-for ii in range(6):
+for ii in range(5):
     line, = ax.plot([], [])
     lines.append(line)
 
@@ -221,10 +221,7 @@ def init_lines():
 
 def animate_alt(i):
     for k, line in enumerate(lines):
-        if (k==0):
-            line.set_data(x, U_true[i,:])
-        else:
-            line.set_data(x, u_solutions[k-1,i,:])
+        line.set_data(x, u_solutions[k,i,:])
     return lines,
 
  
