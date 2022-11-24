@@ -63,8 +63,8 @@ def generate(run_type):
         b2 = str(np.abs(b_arr[iii,1]))
         b3 = str(np.abs(b_arr[iii,2]))
 
-        setup['initial_condition']['rho'] = "lambda x: "+a1+"*(x <= "+a2+") + "+a3+"*(x > "+a1+")"
-        setup['initial_condition']['p'] = "lambda x: "+b1+"*(x <= "+b2+") + "+b3+"*(x > "+b1+")"
+        setup['initial_condition']['rho'] = "lambda x: 4*"+a1+"*(x <= "+a2+") + 0.25*"+a3+"*(x > "+a2+")"
+        setup['initial_condition']['p'] = "lambda x: 4*"+b1+"*(x <= "+b2+") + 0.25*"+b3+"*(x > "+b2+")"
 
         f = open('sod.json', 'w+')
         json.dump(setup, f, indent=4)
