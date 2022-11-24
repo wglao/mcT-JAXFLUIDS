@@ -172,7 +172,7 @@ for i in range(pars.n_plot):
     
     ax = fig.add_subplot(1, pars.n_plot, i+1)
     l1 = ax.plot(x, ut, '-k', linewidth=1.5, label='True')
-    l0 = ax.plot(x, uf, '-', linewidth=1.5, label='Forward solver')
+    l0 = ax.plot(x, ud, '-', linewidth=1.5, label='Forward solver')
     l2 = ax.plot(x, ud, ':', fillstyle='none', linewidth=1, label='Data only')
     l3 = ax.plot(x, um, ':', fillstyle='none', linewidth=1, label='Model constrained (1e5)')
     l4 = ax.plot(x, un, ':', linewidth=1, label='With noise (0.02)')
