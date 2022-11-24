@@ -32,7 +32,7 @@ batch_size = 40
 
 units = 5000
 
-num_epochs = int(1e6)
+num_epochs = int(1.5e5)
 
 facdt = 1
 
@@ -44,7 +44,7 @@ T = 2.0
 Nt = 1000
 dt = T / Nt
 nt_train_data = 100
-nt_test_data = 100
+nt_test_data = 1000
 N = int(Nt*0.9)
 x_max = u*T
 dx = x_max / N

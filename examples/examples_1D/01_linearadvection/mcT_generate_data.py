@@ -77,12 +77,12 @@ def generate(run_type):
         setup['initial_condition']['rho'] = "lambda x: ((x>=0.2) & (x<=0.4)) * ( "+a1+"*(np.exp(-334.477 * (x-0.3-0.005)**2) + np.exp(-334.477 * (x - 0.3 + 0.005)**2) + "+a2+" * np.exp(-334.477 * (x - 0.3)**2))) + ((x>=0.6) & (x<=0.8)) * "+b1+" + "+b2+" + ((x>=1.0) & (x<=1.2)) * (1 - np.abs(10 * (x - 1.1))) + ((x>=1.4) & (x<=1.6)) * ("+a3+"*(np.sqrt(np.maximum( 1 - 100 * (x - 1.5 - 0.005)**2, 0)) + "+a4+"*np.sqrt(np.maximum( 1 - 100 * (x - 1.5 + 0.005)**2, 0)) + "+a5+"*np.sqrt(np.maximum( 1 - 100 * (x - 1.5)**2, 0))) ) + ~( ((x>=0.2) & (x<=0.4)) | ((x>=0.6) & (x<=0.8)) | ((x>=1.0) & (x<=1.2)) | ((x>=1.4) & (x<=1.6)) ) * 0.01"
 
 
-        f = open('next_run.json', 'w+')
+        f = open('linearadvection.json', 'w+')
         json.dump(setup, f, indent=4)
         f.close()
 
         # don't need sim return because data is not being plotted
-        _, initializer, sim_manager = run.setup("next_run.json", "numerical_setup.json")
+        _, initializer, sim_manager = run.setup("linearadvection.json", "numerical_setup.json")
         _,_ = run.sim(initializer, sim_manager)
 
 # training sets
@@ -90,6 +90,3 @@ generate('train')
 
 # test sets
 generate('test')
-
-# clean up
-os.remove("next_run.json")

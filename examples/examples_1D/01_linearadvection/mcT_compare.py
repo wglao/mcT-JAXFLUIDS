@@ -67,17 +67,19 @@ def unpickle_params(filepath):
 
 problem = 'linearadvection'
 
+network = 'End'
+
 # data only
-d_only_params = unpickle_params('Network/Best_' + problem + '_seq_n_mc_' + str(pars.n_seq_mc) +'_forward_mc_train_d' + str(pars.num_train) + '_alpha_0_lr_' + str(pars.learning_rate) + '_batch_' + str(pars.batch_size) + '_nseq_' + str(pars.n_seq) + '_layer_' + str(pars.layers) + 'neurons' + str(pars.units) + '_epochs_' + str(pars.num_epochs))
+d_only_params = unpickle_params('Network/' + network  + '_' + problem + '_seq_n_mc_' + str(pars.n_seq_mc) +'_forward_mc_train_d' + str(pars.num_train) + '_alpha_0_lr_' + str(pars.learning_rate) + '_batch_' + str(pars.batch_size) + '_nseq_' + str(pars.n_seq) + '_layer_' + str(pars.layers) + 'neurons' + str(pars.units) + '_epochs_' + str(pars.num_epochs))
 
 # model-constrained
-mc_params = unpickle_params('Network/Best_' + problem + '_seq_n_mc_' + str(pars.n_seq_mc) +'_forward_mc_train_d' + str(pars.num_train) + '_alpha_' + str(pars.mc_alpha) + '_lr_' + str(pars.learning_rate) + '_batch_' + str(pars.batch_size) + '_nseq_' + str(pars.n_seq) + '_layer_' + str(pars.layers) + 'neurons' + str(pars.units) + '_epochs_' + str(pars.num_epochs))
+mc_params = unpickle_params('Network/' + network  + '_' + problem + '_seq_n_mc_' + str(pars.n_seq_mc) +'_forward_mc_train_d' + str(pars.num_train) + '_alpha_' + str(pars.mc_alpha) + '_lr_' + str(pars.learning_rate) + '_batch_' + str(pars.batch_size) + '_nseq_' + str(pars.n_seq) + '_layer_' + str(pars.layers) + 'neurons' + str(pars.units) + '_epochs_' + str(pars.num_epochs))
 
 # with noise
-noisy_params = unpickle_params('Network/Best_' + problem + '_noise_' + str(pars.noise_level) + '_seq_n_mc_' + str(pars.n_seq_mc) +'_forward_mc_train_d' + str(pars.num_train) + '_alpha_0_lr_' + str(pars.learning_rate) + '_batch_' + str(pars.batch_size) + '_nseq_' + str(pars.n_seq) + '_layer_' + str(pars.layers) + 'neurons' + str(pars.units) + '_epochs_' + str(pars.num_epochs))
+noisy_params = unpickle_params('Network/' + network  + '_' + problem + '_noise_' + str(pars.noise_level) + '_seq_n_mc_' + str(pars.n_seq_mc) +'_forward_mc_train_d' + str(pars.num_train) + '_alpha_0_lr_' + str(pars.learning_rate) + '_batch_' + str(pars.batch_size) + '_nseq_' + str(pars.n_seq) + '_layer_' + str(pars.layers) + 'neurons' + str(pars.units) + '_epochs_' + str(pars.num_epochs))
 
 # model-constrained with noise
-mcn_params = unpickle_params('Network/Best_' + problem + '_noise_' + str(pars.noise_level) + '_seq_n_mc_' + str(pars.n_seq_mc) +'_forward_mc_train_d' + str(pars.num_train) + '_alpha_' + str(pars.mc_alpha) + '_lr_' + str(pars.learning_rate) + '_batch_' + str(pars.batch_size) + '_nseq_' + str(pars.n_seq) + '_layer_' + str(pars.layers) + 'neurons' + str(pars.units) + '_epochs_' + str(pars.num_epochs))
+mcn_params = unpickle_params('Network/' + network  + '_' + problem + '_noise_' + str(pars.noise_level) + '_seq_n_mc_' + str(pars.n_seq_mc) +'_forward_mc_train_d' + str(pars.num_train) + '_alpha_' + str(pars.mc_alpha) + '_lr_' + str(pars.learning_rate) + '_batch_' + str(pars.batch_size) + '_nseq_' + str(pars.n_seq) + '_layer_' + str(pars.layers) + 'neurons' + str(pars.units) + '_epochs_' + str(pars.num_epochs))
 
 # foward solver
 dt = pars.dt
@@ -155,7 +157,9 @@ u_solutions = np.array([U_fwd, U_d_only, U_mc, U_noisy, U_mcn])
 
 fontsize = 4
 fig = plt.figure(figsize=((pars.n_plot+1)*fontsize,fontsize), dpi=400)
-plt.rcParams.update({'font.size': fontsize})
+plt.rcParams['font.size'] = fontsize
+plt.xlabel('x-coordinate')
+plt.ylabel('density')
 
 for i in range(pars.n_plot):
 
@@ -168,11 +172,11 @@ for i in range(pars.n_plot):
     
     ax = fig.add_subplot(1, pars.n_plot, i+1)
     l1 = ax.plot(x, ut, '-k', linewidth=1.5, label='True')
-    l0 = ax.plot(x, ud, '--', linewidth=1.5, label='Forward solver')
-    l2 = ax.plot(x, ud, ':o', markevery=5, fillstyle='none', linewidth=1.5, label='Data only')
-    l3 = ax.plot(x, um, ':v', markevery=5, fillstyle='none', linewidth=1.5, label='Model constrained (1e5)')
-    l4 = ax.plot(x, un, ':x', markevery=5, linewidth=1.5, label='With noise (0.02)')
-    l5 = ax.plot(x, umn, ':+', markevery=5, linewidth=1.5, label='Model constrained (1e5) and with noise (0.02)')
+    l0 = ax.plot(x, ud, '-', linewidth=1.5, label='Forward solver')
+    l2 = ax.plot(x, ud, ':', markevery=5, fillstyle='none', linewidth=1, label='Data only')
+    l3 = ax.plot(x, um, ':', markevery=5, fillstyle='none', linewidth=1, label='Model constrained (1e5)')
+    l4 = ax.plot(x, un, ':', markevery=5, linewidth=1, label='With noise (0.02)')
+    l5 = ax.plot(x, umn, ':', markevery=5, linewidth=1, label='Model constrained (1e5) and with noise (0.02)')
 
 
     # ax.set_aspect('auto', adjustable='box')
@@ -203,9 +207,11 @@ for ii in range(6):
     line, = ax.plot([], [])
     lines.append(line)
 
-plt.xlabel('x-coordinate [-]')
-plt.ylabel('Amplitude [-]')
+plt.xlabel('x-coordinate')
+plt.ylabel('density')
 plt.legend(legends, loc=3, frameon=False)
+plt.rcParams['lines.linewidth'] = 2
+plt.rcParams['font.size'] = 18
 
 def init_lines():
     for line in lines:
@@ -213,16 +219,24 @@ def init_lines():
     return lines,
 
 def animate_alt(i):
+    new_lines = []
     for k, line in enumerate(lines):
-        if (k==len(lines)-1):
-            line.set_data(x, U_true[i,:])
+        if (k==0):
+            line.set_ydata(U_true[i,:])
         else:
-            line.set_data(x, u_solutions[k,i,:])
-    return lines,
+            line.set_ydata(u_solutions[k-1,i,:])
+        new_lines.append(line)
+    return new_lines
 
  
 # call the animator.  blit=True means only re-draw the parts that have changed.
 anim = animation.FuncAnimation(fig, animate_alt, init_func=init_lines, frames=pars.nt_test_data, interval=100, blit=False)
-
- 
+if input_noise:
+    anim.save('figs/compare_anim_' + problem + '_noise.gif')
+else:
+    anim.save('figs/compare_anim_' + problem + '.gif')
+if input_noise:
+    plt.savefig('figs/compare_last_frame_' + problem + '_noise.png', bbox_inches='tight')
+else:
+    plt.savefig('figs/compare_last_frame_' + problem + '.png', bbox_inches='tight')
 plt.show()
