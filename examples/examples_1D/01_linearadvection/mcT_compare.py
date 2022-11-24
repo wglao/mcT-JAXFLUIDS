@@ -44,7 +44,7 @@ for ii, run in enumerate(test_runs):
 print(truth.shape)
 
 # randomized initial condition
-input_noise = False
+input_noise = True
 if input_noise:
     ns, nt, nx = truth.shape
     nosie_vec = jax.random.normal(pars.key_data_noise, truth.shape)
@@ -173,10 +173,10 @@ for i in range(pars.n_plot):
     ax = fig.add_subplot(1, pars.n_plot, i+1)
     l1 = ax.plot(x, ut, '-k', linewidth=1.5, label='True')
     l0 = ax.plot(x, uf, '-', linewidth=1.5, label='Forward solver')
-    l2 = ax.plot(x, ud, ':', fillstyle='none', linewidth=1, label='Data only')
-    l3 = ax.plot(x, um, ':', fillstyle='none', linewidth=1, label='Model constrained (1e5)')
+    l2 = ax.plot(x, ud, ':', linewidth=1, label='Data only')
+    l3 = ax.plot(x, um, ':o', fillstyle='none', markevery=0.1, linewidth=1, label='Model constrained (1e5)')
     l4 = ax.plot(x, un, '--', linewidth=1, label='With noise (0.02)')
-    l5 = ax.plot(x, umn, '--', linewidth=1, label='Model constrained (1e5) and with noise (0.02)')
+    l5 = ax.plot(x, umn, '--o', fillstyle='none', markevery=(0.1,0.05), linewidth=1, label='Model constrained (1e5) and with noise (0.02)')
 
 
     # ax.set_aspect('auto', adjustable='box')
@@ -219,14 +219,12 @@ def init_lines():
     return lines,
 
 def animate_alt(i):
-    new_lines = []
     for k, line in enumerate(lines):
         if (k==0):
             line.set_ydata(U_true[i,:])
         else:
             line.set_ydata(u_solutions[k-1,i,:])
-        new_lines.append(line)
-    return new_lines
+    return lines,
 
  
 # call the animator.  blit=True means only re-draw the parts that have changed.
