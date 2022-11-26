@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 from jaxfluids import InputReader, Initializer, SimulationManager
 from jaxfluids.post_process import load_data, create_lineplot
+import jax.numpy as jnp
 
 # SETUP SIMULATION
 input_reader = InputReader("linearadvection.json", "numerical_setup.json")
@@ -11,10 +12,16 @@ sim_manager  = SimulationManager(input_reader)
 buffer_dictionary = initializer.initialization()
 sim_manager.simulate(buffer_dictionary)
 
-# LOAD DATA
+# # LOAD DATA
+# path = 'results/linearadvection/domain'
 path = sim_manager.output_writer.save_path_domain
 quantities = ["density"]
 cell_centers, cell_sizes, times, data_dict = load_data(path, quantities)
+
+# print(data_dict['density'][1,...])
+# print(data_dict['density'].shape)
+# test = jnp.reshape(data_dict['density'], (3,200))
+# print(test[1,:])
 
 # PLOT
 nrows_ncols = (1,1)

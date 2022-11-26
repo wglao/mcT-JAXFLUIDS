@@ -1,0 +1,4 @@
+create haiku implementation of mcTangent
+use haiku mcTangent in mcTangentNN.py
+create way for mcTangent params and network architecture to be automatically added to buffer_dcit in initializer.py
+create dict of NNs for easy setup in case.json
