@@ -1,9 +1,10 @@
 {
     "conservatives": {
         "halo_cells": 4,
-        "time_integration" : {
+        "time_integration": {
             "integrator": "RK3",
-            "CFL": 0.9
+            "CFL": 0.9,
+            "fixed_timestep": 0.002
         },
         "convective_fluxes": {
             "convective_solver": "GODUNOV",
@@ -25,18 +26,22 @@
         "is_heat_flux": false,
         "is_volume_force": false
     },
-    "active_forcings": { 
+    "active_forcings": {
         "is_mass_flow_forcing": false,
         "is_temperature_forcing": false,
         "is_turb_hit_forcing": false
     },
-
-    "output":  {
+    "output": {
         "is_double_precision_compute": true,
         "is_double_precision_output": true,
         "derivative_stencil": "DC4",
         "quantities": {
-            "primes": ["density", "velocityX", "pressure", "temperature"]
+            "primes": [
+                "density",
+                "velocityX",
+                "pressure",
+                "temperature"
+            ]
         }
     }
 }
