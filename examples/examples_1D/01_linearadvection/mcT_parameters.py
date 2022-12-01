@@ -37,5 +37,5 @@ b_test_key = jrand.PRNGKey(4)
 noise_key = jrand.PRNGKey(5)
 
 # sample set size
-num_train = 100
-num_test = 100
+num_train = 40
+num_test = 40

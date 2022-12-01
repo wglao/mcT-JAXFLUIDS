@@ -26,7 +26,7 @@ Visualize results
 # get parameters
 from mcT_parameters import *
 
-num_batches = np.ceil(num_train/batch_size)
+num_batches = int(np.ceil(num_train/batch_size))
 
 # data only
 mc_flag = False
@@ -38,10 +38,6 @@ if not noise_flag:
     noise_level = 0
 
 case_name = 'linearadvection'
-
-# initial condition coefficients
-a_train_arr = jrand.normal(a_train_key, (num_train, 5))
-a_test_arr = jrand.normal(a_test_key, (num_test, 5))
 
 # uploading wandb
 filename = 'mcT_adv'
@@ -67,11 +63,10 @@ if not os.path.exists('data'):
 # if data exists check if the number of samples meets num_test/num_train requirement
 else:
     if os.path.exists(test_path):
-        if len(os.listdir(test_path)) < num_test:
-            test_to_run = num_test - len(os.listdir(test_path))
+        test_to_run = num_test - len(os.listdir(test_path)) if len(os.listdir(test_path)) < num_test else 0
     if os.path.exists(train_path):
-        if len(os.listdir(train_path)) < num_train:
-            train_to_run = num_train - len(os.listdir(train_path))
+        train_to_run = num_train - len(os.listdir(train_path)) if len(os.listdir(train_path)) < num_train else 0
+            
 
 # generate data if needed
 def generate(case_setup: dict, num_setup: dict) -> None: # writes data to separate h5 file
@@ -125,6 +120,8 @@ else:
 if test_to_run > 0:
     print("-" * 15)
     print('Generating test data...')
+    # initial condition coefficients
+    a_test_arr = jrand.normal(a_test_key, (num_test, 5))
     start = num_test - test_to_run
     case_setup['general']['save_path'] = test_path
 
@@ -143,6 +140,8 @@ if test_to_run > 0:
 if train_to_run > 0:
     print("-" * 15)
     print('Generating train data...')
+    # initial condition coefficients
+    a_train_arr = jrand.normal(a_train_key, (num_train, 5))
     start = num_train - train_to_run
 
     case_setup['general']['save_path'] = train_path
@@ -160,12 +159,12 @@ if train_to_run > 0:
         generate(case_setup, num_setup)
 
 # %% load data
-test_data = np.zeros((num_test,nt,nx))
-train_data = np.zeros((num_train,nt,nx))
+test_data = np.zeros((num_test,nt+1,nx)) # nt+1 to hold initial condition and nt time steps
+train_data = np.zeros((num_train,nt+1,nx))
 test_setup = []
 train_setup = []
-test_times = np.zeros((num_test,nt))
-train_times = np.zeros((num_train,nt))
+test_times = np.zeros((num_test,nt+1))
+train_times = np.zeros((num_train,nt+1))
 
 test_samples = os.listdir(test_path)
 train_samples = os.listdir(train_path)
@@ -174,8 +173,8 @@ print("-" * 15)
 print('Loading data...')
 for ii in range(num_test):
     sample_path = os.path.join(test_path,test_samples[ii])
-    _, _, times, data_dict = load_data(os.path.join(sample_path,'domain'))
-    test_data[ii,...] = jnp.reshape(data_dict['density'][:,:,0,0],(nt,nx))
+    _, _, times, data_dict = load_data(os.path.join(sample_path,'domain'),['density'])
+    test_data[ii,...] = data_dict['density'][:,:,0,0]
     test_times[ii,:] = times
     
     # save setup dicts for running JAX-Fluids with mcTangent later
@@ -187,8 +186,8 @@ for ii in range(num_test):
 
 for ii in range(num_train):
     sample_path = os.path.join(test_path,train_samples[ii])
-    _, _, times, data_dict = load_data(os.path.join(train_path,train_samples[ii],'domain'))
-    train_data[ii,...] = jnp.reshape(data_dict['density'][:,:,0,0],(nt,nx))
+    _, _, times, data_dict = load_data(os.path.join(train_path,train_samples[ii],'domain'),['density'])
+    train_data[ii,...] = data_dict['density'][:,:,0,0]
     train_times[ii,:] = times
 
     # save setup dicts for running JAX-Fluids with mcTangent later
@@ -284,7 +283,9 @@ def _step_fwd_one_seq(data: jnp.ndarray, times: jnp.ndarray, case_setup: dict, n
     # step forward
     pred_arr, time_arr = sim_manager.feed_forward(primes_init,None,ns+1,dt,times[0],1,params,nn_fn)
     pred_mc = jnp.array([data[0,:]])
-    pred_mc = lax.fori_loop(0,ns,_body_mc_solve,pred_mc)
+    # pred_mc = lax.fori_loop(0,ns,_body_mc_solve,pred_mc)
+    for i in range(ns):
+        pred_mc = _body_mc_solve(i, pred_mc)
 
     # calculate loss for sequence
     loss_ml = _mse(pred_arr[1:,:],data[1:,:])
@@ -329,22 +330,24 @@ def step_fwd_batch(data_batch: jnp.ndarray, times_batch: jnp.ndarray, case_batch
     :return time_arr: array containing all prediction times, of shape [batch_size, nt-ns, ns+2]
     :return loss_batch: mean loss over all samples and sequences
     """
-    pred_arr, time_arr, loss_arr = vmap(_step_fwd_one_sample, in_axes=(0,0,0,None,None,None), out_axes=(0,0,0))(data_batch, times_batch, case_batch, num_setup, params, nn_fn)
+    print(case_batch, type(case_batch))
+    pred_arr, time_arr, loss_arr = vmap(_step_fwd_one_sample, in_axes=(0,0,[0],None,None,None), out_axes=(0,0,0))(data_batch, times_batch, case_batch, num_setup, params, nn_fn)
     loss_batch = jnp.mean(loss_arr)
     return pred_arr, time_arr, loss_batch
-
 
 def _body_make_data_seq(i, args) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """
     creates sequences and appends them into the batched format
     """
     data_sample, times_sample, data_seq, times_seq = args
-    data_seq[i,...] = lax.dynamic_slice_in_dim(data_sample, i, i+ns+1)
-    times_seq[i,:] = lax.dynamic_slice_in_dim(times_sample, i, i+ns+1)
+    data_seq = data_seq.at[i,...].set(lax.dynamic_slice_in_dim(data_sample, i, ns+2))
+    times_seq = times_seq.at[i,:].set(lax.dynamic_slice_in_dim(times_sample, i, ns+2))
     return data_seq, times_seq
 
 def _make_data_seq(data_sample,times_sample,data_seq,times_seq) -> Tuple[jnp.ndarray, jnp.ndarray]:
-    data_seq = lax.fori_loop(0,nt-ns,_body_make_data_seq,(data_sample,times_sample,data_seq,times_seq))
+    # _, _, data_seq, times_seq = lax.fori_loop(0,nt-ns,_body_make_data_seq,(data_sample,times_sample,data_seq,times_seq))
+    for i in range(nt-ns):
+        data_seq, times_seq = _body_make_data_seq(i,(data_sample,times_sample,data_seq,times_seq))
     return data_seq, times_seq
 
 def make_data_batch(data_batch, times_batch, data_seq, times_seq) -> Tuple[jnp.ndarray, jnp.ndarray]:
@@ -356,7 +359,7 @@ def make_data_batch(data_batch, times_batch, data_seq, times_seq) -> Tuple[jnp.n
 def _body_batch_cases(i, args) -> list:
     cases, cases_batch, cases_idx = args
     cases_batch.append(cases[cases_idx[i]])
-    return cases_batch
+    return cases, cases_batch, cases_idx
 
 def make_batch(i,data,times,cases,num_samples) -> Batch:
     data_seq = np.zeros((batch_size,nt-ns,ns+2,nx))
@@ -366,10 +369,12 @@ def make_batch(i,data,times,cases,num_samples) -> Batch:
     # batch data
     data_batch = lax.dynamic_slice_in_dim(data, i * batch_size, batch_size)
     times_batch = lax.dynamic_slice_in_dim(times, i * batch_size, batch_size)
-    data_seq, times_seq = make_batch(data_batch,times_batch,data_seq,times_seq)
+    data_seq, times_seq = make_data_batch(data_batch,times_batch,data_seq,times_seq)
 
     cases_idx = lax.dynamic_slice_in_dim(jnp.arange(0,num_samples), i * batch_size, batch_size)
-    cases_batch = lax.fori_loop(0,batch_size,_body_batch_cases,(cases,cases_batch,cases_idx))
+    # _, cases_batch, _ = lax.fori_loop(0,batch_size,_body_batch_cases,(cases,cases_batch,cases_idx))
+    for i in range(batch_size):
+        _, cases_batch, _ = _body_batch_cases(i,(cases,cases_batch,cases_idx))
     
     return Batch(data_seq,times_seq,cases_batch)
 
@@ -406,8 +411,8 @@ def _evaluate_sample(state: TrainingState, test_sample: jnp.ndarray, case_setup:
     # get error
     sim_dir = os.listdir(save_path)
     sim_dir.sort()
-    _, _, _, data_dict = load_data(os.path.join(save_path,sim_dir[-1],'domain'))
-    sample_err = jnp.reshape(data_dict['density'][:,:,0,0],(nt,nx)) - test_sample
+    _, _, _, data_dict = load_data(os.path.join(save_path,sim_dir[-1],'domain'),['density'])
+    sample_err = data_dict['density'][:,:,0,0] - test_sample
     # only keep last epoch
     if epoch != num_epochs-1:
         shutil.rmtree(save_path)
@@ -426,24 +431,31 @@ def evaluate(state: TrainingState, batch: Batch, setup: Setup, epoch: int) -> fl
     ----- returns -----\n
     :return epoch_err: mean squared error for all test data, the error of the epoch
     """
-    err_arr = vmap(_evaluate_sample, in_axes=(None,0,0,None,None,None), out_axes=(0))(state,batch.data,setup.test,setup.numerical,setup.save_path,epoch)
+    err_arr = vmap(_evaluate_sample, in_axes=(None,0,0,None,None,None))(state,batch.data,setup.test,setup.numerical,setup.save_path,epoch)
     epoch_err = _mse(err_arr)
     return epoch_err
 
 def _body_epoch(i, args):
     train_data, train_times, state, setup = args
-    
     train_batch = make_batch(i,train_data,train_times,setup.train,num_train)
     state = update(state,train_batch,setup.numerical)
-    return state
+    return (train_data, train_times, state, setup)
+
+def dummy(i,args):
+    x,y,z = args
+    print('dummy')
+    return TrainingState(x,y,z)
 
 def Train(train_data: jnp.ndarray, test_data:jnp.ndarray, train_times: jnp.ndarray, test_times: jnp.ndarray, num_epochs: int, state: TrainingState, setup: Setup):
     min_err = 100
     epoch_min = 1
-    optimal_state = state
+    best_state = state
     for epoch in range(num_epochs):
         t1 = time.time()
-        state = lax.fori_loop(0,num_batches,_body_epoch,(train_data,train_times,state,setup))
+        # _, _, state, _ = lax.fori_loop(0,2,_body_epoch,(train_data,train_times,state,setup))
+        # state = lax.fori_loop(0,2,dummy,(state))
+        for i in range(num_batches):
+            _, _, state, _ = _body_epoch(i,(train_data,train_times,state,setup))
         t2 = time.time()
 
         test_batch = Batch(test_data,test_times,setup.test)
@@ -489,10 +501,10 @@ sample_to_plot = 75
 x = jnp.linspace(0,x_max,nx)
 sims = os.listdir(save_path)
 sims.sort()
-_, _, _, data_dict = load_data(os.path.join(save_path,sims[sample_to_plot],'domain'))
+_, _, _, data_dict = load_data(os.path.join(save_path,sims[sample_to_plot],'domain'),['density'])
 
-data_true = jnp.reshape(test_data[sample_to_plot,...],(nt,nx))
-data_pred = jnp.reshape(data_dict['density'][:,:,0,0],(nt,nx))
+data_true = test_data[sample_to_plot,...]
+data_pred = data_dict['density'][:,:,0,0]
 times = test_times[sample_to_plot]
 
 n_plot = 3
