@@ -2,6 +2,7 @@ from typing import List, Tuple, Union, Dict, NamedTuple
 import time, os, wandb
 import shutil
 import numpy as np
+import re
 import jax
 import jax.numpy as jnp
 import jax.random as jrand
@@ -10,9 +11,9 @@ import json
 import pickle
 import haiku as hk
 import optax
-import mcTangentNN
+# import mcTangentNN
 from mcT_forward_schemes_1D import Upwind
-from jaxfluids.solvers.riemann_solvers import RusanovNN, RiemannNN
+# from jaxfluids.solvers.riemann_solvers import RusanovNN, RiemannNN
 from jaxfluids import InputReader, Initializer, SimulationManager
 from jaxfluids.post_process import load_data
 import matplotlib.pyplot as plt
@@ -161,10 +162,10 @@ if train_to_run > 0:
 # %% load data
 test_data = np.zeros((num_test,nt+1,nx)) # nt+1 to hold initial condition and nt time steps
 train_data = np.zeros((num_train,nt+1,nx))
-test_setup = []
-train_setup = []
 test_times = np.zeros((num_test,nt+1))
 train_times = np.zeros((num_train,nt+1))
+test_setup = np.empty(num_test, dtype=object)
+train_setup = np.empty(num_train, dtype=object)
 
 test_samples = os.listdir(test_path)
 train_samples = os.listdir(train_path)
@@ -181,8 +182,7 @@ for ii in range(num_test):
     f = open(os.path.join(sample_path,case_name+'.json'), 'r')
     case_setup = json.load(f)
     f.close()
-    test_setup.append(case_setup)
-
+    test_setup[ii] = case_setup
 
 for ii in range(num_train):
     sample_path = os.path.join(test_path,train_samples[ii])
@@ -194,13 +194,13 @@ for ii in range(num_train):
     f = open(os.path.join(sample_path,case_name+'.json'), 'r')
     case_setup = json.load(f)
     f.close()
-    train_setup.append(case_setup)
+    train_setup[ii] = case_setup
 
 # %% create mcTangent network and training functions
 class Batch(NamedTuple):
     data: jnp.ndarray  # all rho(t,x) in a batch of sequences [batch_size, nt-ns, ns+2, nx]
     times: jnp.ndarray # all times for all sequences in data [batch_size, nt-ns, ns+2]
-    cases: list         # contains dicts for every sample in the batch
+    cases: np.ndarray  # contains dicts for every sample in the batch
 
 class TrainingState(NamedTuple):
     params: hk.Params
@@ -208,8 +208,8 @@ class TrainingState(NamedTuple):
     loss: float
 
 class Setup(NamedTuple):
-    test: list  # contains dicts for every test run
-    train: list  # contains dicts for every train run
+    test: np.ndarray  # contains dicts for every test run
+    train: np.ndarray  # contains dicts for every train run
     numerical: dict  # contains numerical setup consistent across all runs
     save_path: str  # path to the directory containing save data from the evaluation step
 
@@ -254,86 +254,55 @@ def _mse(pred: jnp.ndarray, true=None) -> float:
 def _body_mc_solve(i, val) -> jnp.ndarray:
     # pass val into target mc solver
     new_val = Upwind(val[i,:], u, dt, dx)
-    return jnp.concatenate((val,new_val))
+    return val.at[i,:].set(new_val)
 
-def _step_fwd_one_seq(data: jnp.ndarray, times: jnp.ndarray, case_setup: dict, num_setup: dict, params: hk.Params, nn_fn: hk.Transformed) -> Tuple[jnp.DeviceArray, jnp.DeviceArray, jnp.DeviceArray]:
+def step_fwd_batch(data_batch: jnp.ndarray, times_batch: jnp.ndarray, case_batch: np.ndarray, num_setup: dict, params: hk.Params, nn_fn: hk.Transformed) -> float:
     """
-    creates a simulation manager to feed forward the state by ns+1 steps
-    outputs an array of predictions to be used in calculating the loss
-    
-    ----- inputs -----\n
-    :param data: one sequence of a data sample, of shape [ns+2, nx]
-    :param times: time of every profile in the sequence, of shape [ns+2]
-    :param case_setup: dictionary used to create the InputReader
-    :param num_setup: dictionary used to create the InputReader
-    :param params: NN parameters
-    :param nn_fn: Haiku transformed function containing NN architecture
-
-    ----- returns -----\n
-    :return pred_arr: array containing all predicted trajectories, of shape [ns+2, nx]
-    :return time_arr: array containing all prediction times, of shape [ns+2]
-    :return loss_one_seq: loss calculated from the processed sequence
-    """
-    # set up JAX-Fluids simulation
-    case_setup['intial_condition']['rho'] = data[0,:]
-    input_reader = InputReader(case_setup,num_setup)
-    sim_manager = SimulationManager(input_reader)
-    primes_init = jnp.reshape(sim_manager.domain_information.domain_slices_conservatives,(1,3))
-
-    # step forward
-    pred_arr, time_arr = sim_manager.feed_forward(primes_init,None,ns+1,dt,times[0],1,params,nn_fn)
-    pred_mc = jnp.array([data[0,:]])
-    # pred_mc = lax.fori_loop(0,ns,_body_mc_solve,pred_mc)
-    for i in range(ns):
-        pred_mc = _body_mc_solve(i, pred_mc)
-
-    # calculate loss for sequence
-    loss_ml = _mse(pred_arr[1:,:],data[1:,:])
-    loss_mc = mc_alpha*_mse(pred_arr[1:,:],pred_mc[1:,:])
-    loss_one_seq = loss_ml + mc_alpha*loss_mc
-
-    return pred_arr, time_arr, loss_one_seq
-
-def _step_fwd_one_sample(data_sample: jnp.ndarray, times_sample: jnp.ndarray, case_setup: dict, num_setup: dict, params: hk.Params, nn_fn: hk.Transformed) -> Tuple[jnp.DeviceArray, jnp.DeviceArray, jnp.DeviceArray]:
-    """
-    vectorized version of _step_fwd_one_seq
-    
-    ----- inputs -----\n
-    :param data_sample: one sample of batched data, of shape [nt-ns, ns+2, nx]
-    :param times_sample: times for all sequences in a sample, of shape [nt-ns, ns+2]
-    :param case_setup: dictionary used to create the InputReader
-    :param num_setup: dictionary used to create the InputReader
-    :param params: NN parameters
-    :param nn_fn: Haiku transformed function containing NN architecture
-
-    ----- returns -----\n
-    :return pred_arr: array containing all predicted trajectories, of shape [nt-ns, ns+2, nx]
-    :return time_arr: array containing all prediction times, of shape [nt-ns, ns+2]
-    :return loss_arr: loss over all sequences
-    """
-    return vmap(_step_fwd_one_seq, in_axes=(0,0,None,None,None,None), out_axes=(0,0,0))(data_sample, times_sample, case_setup, num_setup, params, nn_fn)
-
-def step_fwd_batch(data_batch: jnp.ndarray, times_batch: jnp.ndarray, case_batch: list, num_setup: dict, params: hk.Params, nn_fn: hk.Transformed) -> Tuple[jnp.DeviceArray, jnp.DeviceArray, jnp.DeviceArray]:
-    """
-    vectorized form of _step_fwd_one_sample
+    Loops through each sequence to calculate loss
     
     ----- inputs -----\n
     :param data_batch: batched dataset, of shape [batch_size, nt-ns, ns+2, nx]
     :param times_batch: times for all samples in a batch, of shape [batch_size, nt-ns, ns+2]
-    :param case_batch: list of case setup dicts for each sample in the batch, of shape [batch_size]
+    :param case_batch: array of case setup dicts for each sample in the batch, of shape [batch_size]
     :param num_setup: dictionary used to create the InputReader
     :param params: NN parameters
     :param nn_fn: Haiku transformed function containing NN architecture
 
     ----- returns -----\n
-    :return pred_arr: array containing all predicted trajectories, of shape [batch_size, nt-ns, ns+2, nx]
-    :return time_arr: array containing all prediction times, of shape [batch_size, nt-ns, ns+2]
     :return loss_batch: mean loss over all samples and sequences
     """
-    print(case_batch, type(case_batch))
-    pred_arr, time_arr, loss_arr = vmap(_step_fwd_one_sample, in_axes=(0,0,[0],None,None,None), out_axes=(0,0,0))(data_batch, times_batch, case_batch, num_setup, params, nn_fn)
+    # pred_arr, time_arr, loss_arr = vmap(_step_fwd_one_sample, in_axes=(0,0,0,None,None,None), out_axes=(0,0,0))(data_batch, times_batch, case_batch, num_setup, params, nn_fn)
+    loss_arr = np.zeros((batch_size,nt-ns))
+    for sample in range(batch_size):
+        case_setup = case_batch[sample]
+        for seq in range(nt-ns):
+            t0 = times_batch[sample,seq,0]
+            rho0 = case_setup['initial_condition']['rho']
+            print(rho0, type(rho0))
+            rho0_split = re.split(":",rho0)
+            x0 = u*t0
+            rho0_split[1] = re.sub(r'\bx\b','x-'+str(x0),rho0_split[1])
+            rho0 = ':'.join(rho0_split)
+            print(rho0, type(rho0))
+            case_setup['initial_condition']['rho'] = rho0
+            # case_setup['initial_condition']['rho'] = data_batch[sample,seq,0,:]
+            input_reader = InputReader(case_setup,num_setup)
+            sim_manager = SimulationManager(input_reader)
+            primes_init = jnp.reshape(sim_manager.domain_information.domain_slices_conservatives,(1,3))
+
+            # step forward
+            pred_arr, _ = sim_manager.feed_forward(primes_init,None,ns+1,dt,t0,1,params,nn_fn)
+            pred_mc = jnp.array(pred_arr.shape)
+            # pred_mc = lax.fori_loop(0,ns,_body_mc_solve,pred_mc)
+            for i in range(ns+1):
+                pred_mc = _body_mc_solve(i, pred_mc)
+
+            # calculate loss for sequence
+            loss_ml = _mse(pred_arr[1:,:],data_batch[sample,seq,1:,:])
+            loss_mc = mc_alpha*_mse(pred_arr[1:,:],pred_mc[1:,:])
+            loss_arr[sample,seq] = loss_ml + loss_mc
     loss_batch = jnp.mean(loss_arr)
-    return pred_arr, time_arr, loss_batch
+    return loss_batch
 
 def _body_make_data_seq(i, args) -> Tuple[jnp.ndarray, jnp.ndarray]:
     """
@@ -342,12 +311,12 @@ def _body_make_data_seq(i, args) -> Tuple[jnp.ndarray, jnp.ndarray]:
     data_sample, times_sample, data_seq, times_seq = args
     data_seq = data_seq.at[i,...].set(lax.dynamic_slice_in_dim(data_sample, i, ns+2))
     times_seq = times_seq.at[i,:].set(lax.dynamic_slice_in_dim(times_sample, i, ns+2))
-    return data_seq, times_seq
+    return data_sample, times_sample, data_seq, times_seq
 
 def _make_data_seq(data_sample,times_sample,data_seq,times_seq) -> Tuple[jnp.ndarray, jnp.ndarray]:
-    # _, _, data_seq, times_seq = lax.fori_loop(0,nt-ns,_body_make_data_seq,(data_sample,times_sample,data_seq,times_seq))
-    for i in range(nt-ns):
-        data_seq, times_seq = _body_make_data_seq(i,(data_sample,times_sample,data_seq,times_seq))
+    _, _, data_seq, times_seq = lax.fori_loop(0,nt-ns,_body_make_data_seq,(data_sample,times_sample,data_seq,times_seq))
+    # for i in range(nt-ns):
+    #     _, _, data_seq, times_seq = _body_make_data_seq(i,(data_sample,times_sample,data_seq,times_seq))
     return data_seq, times_seq
 
 def make_data_batch(data_batch, times_batch, data_seq, times_seq) -> Tuple[jnp.ndarray, jnp.ndarray]:
@@ -356,15 +325,9 @@ def make_data_batch(data_batch, times_batch, data_seq, times_seq) -> Tuple[jnp.n
     """
     return vmap(_make_data_seq, in_axes=(0,0,0,0), out_axes=(0,0))(data_batch,times_batch,data_seq,times_seq)
 
-def _body_batch_cases(i, args) -> list:
-    cases, cases_batch, cases_idx = args
-    cases_batch.append(cases[cases_idx[i]])
-    return cases, cases_batch, cases_idx
-
 def make_batch(i,data,times,cases,num_samples) -> Batch:
     data_seq = np.zeros((batch_size,nt-ns,ns+2,nx))
     times_seq = np.zeros((batch_size,nt-ns,ns+2))
-    cases_batch = []
 
     # batch data
     data_batch = lax.dynamic_slice_in_dim(data, i * batch_size, batch_size)
@@ -372,9 +335,7 @@ def make_batch(i,data,times,cases,num_samples) -> Batch:
     data_seq, times_seq = make_data_batch(data_batch,times_batch,data_seq,times_seq)
 
     cases_idx = lax.dynamic_slice_in_dim(jnp.arange(0,num_samples), i * batch_size, batch_size)
-    # _, cases_batch, _ = lax.fori_loop(0,batch_size,_body_batch_cases,(cases,cases_batch,cases_idx))
-    for i in range(batch_size):
-        _, cases_batch, _ = _body_batch_cases(i,(cases,cases_batch,cases_idx))
+    cases_batch = cases[cases_idx]
     
     return Batch(data_seq,times_seq,cases_batch)
 
@@ -439,7 +400,7 @@ def _body_epoch(i, args):
     train_data, train_times, state, setup = args
     train_batch = make_batch(i,train_data,train_times,setup.train,num_train)
     state = update(state,train_batch,setup.numerical)
-    return (train_data, train_times, state, setup)
+    return train_data, train_times, state, setup
 
 def dummy(i,args):
     x,y,z = args
@@ -474,9 +435,22 @@ def Train(train_data: jnp.ndarray, test_data:jnp.ndarray, train_times: jnp.ndarr
     return best_state, state
 
 # %% MAIN
+
+save_path = os.path.join('results','mcTangentNN')
+sims = os.listdir(save_path)
+sims.sort()
+_, _, _, data_dict = load_data(os.path.join(save_path,sims[0],'domain'),["density", "velocityX", "velocityY", "velocityZ", "pressure", "temperature"])
+rho_init = data_dict['density']
+ux_init = data_dict['velocityX']
+uy_init = data_dict['velocityY']
+uz_init = data_dict['velocityZ']
+p_init = data_dict['pressure']
+temp_init = data_dict['temperature']
+data_init = jnp.array([rho_init,ux_init,uy_init,uz_init,p_init,temp_init])
+
 optimizer = optax.adam(learning_rate)
 mcT_net = hk.without_apply_rng(hk.transform(mcT_fn))
-initial_params = mcT_net.init(net_key, train_data[0,0,:])
+initial_params = mcT_net.init(net_key, data_init)
 initial_opt_state = optimizer.init(initial_params)
 net_state = TrainingState(initial_params, initial_opt_state, 0)
 
@@ -486,7 +460,6 @@ num_setup['machine_learning'] = {
     'ml_parameters_dict': net_state.params,
     'ml_network_dict': mcT_net
 }
-save_path = os.path.join('results','mcTangentNN')
 setup = Setup(test_setup,train_setup,num_setup,save_path)
 
 best_state, end_state = Train(train_data,test_data,train_times,test_times,num_epochs,net_state,setup)
@@ -499,9 +472,6 @@ save_params(end_state.params,os.path.join(param_path,"end"))
 # %% visualize end state
 sample_to_plot = 75
 x = jnp.linspace(0,x_max,nx)
-sims = os.listdir(save_path)
-sims.sort()
-_, _, _, data_dict = load_data(os.path.join(save_path,sims[sample_to_plot],'domain'),['density'])
 
 data_true = test_data[sample_to_plot,...]
 data_pred = data_dict['density'][:,:,0,0]

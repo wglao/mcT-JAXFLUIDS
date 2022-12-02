@@ -24,3 +24,5 @@ requirements.txt
 *.tar.gz
 Network
 figs
+*.ipynb
+.ipynb_checkpoints
