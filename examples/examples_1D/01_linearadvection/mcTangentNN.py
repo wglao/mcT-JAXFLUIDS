@@ -50,26 +50,15 @@ class mcTangentNN(RiemannSolver):
 
     def solve_riemann_problem_xi(self, primes_L: jnp.DeviceArray, primes_R: jnp.DeviceArray, 
         cons_L: jnp.DeviceArray, cons_R: jnp.DeviceArray, axis: int, 
-        ml_parameters_dict: hk.Params, ml_networks_dict: hk.Transformed, **kwargs) -> jnp.DeviceArray:        
-        params = ml_parameters_dict
-        net    = ml_networks_dict
+        ml_parameters_dict: dict, ml_networks_dict: dict, **kwargs) -> jnp.DeviceArray:        
+        params = ml_parameters_dict['riemann_solver']
+        net    = ml_networks_dict['riemann_solver']
 
-        # # PHYSICAL FLUXES
-        # fluxes_left  = get_fluxes_xi(primes_L, cons_L, axis)
-        # fluxes_right = get_fluxes_xi(primes_R, cons_R, axis)
-
-        # # BUILD NEURAL NETWORK INPUTS
-        # speed_of_sound_left  = self.material_manager.get_speed_of_sound(p = primes_L[4], rho = primes_L[0])
-        # speed_of_sound_right = self.material_manager.get_speed_of_sound(p = primes_R[4], rho = primes_R[0])
-        # speed_of_sound = 0.5 * (speed_of_sound_left + speed_of_sound_right)
-
-        # delta_vel = jnp.abs(primes_R[axis+1] - primes_L[axis+1])
-        # mean_vel  = 0.5 * (primes_L[axis+1] + primes_R[axis+1])
-
-        # entropy_L = primes_L[4] / (primes_L[0])**self.material_manager.gamma
-        # entropy_R = primes_R[4] / (primes_R[0])**self.material_manager.gamma
-        # delta_s = jnp.abs(entropy_R - entropy_L)
+        assert type(net) == hk.Transformed, "Network architecture must be constructed using the Haiku Transform"
 
         # EVALUATE NEURAL NETWORK FOR TANGENT MANIFOLD
-        fluxes_xi = net.apply(params, primes_L)
+        try:
+            fluxes_xi = net.apply(params, jnp.array([primes_L, primes_R, cons_L, cons_R]))
+        except Exception as e:
+            print(e)
         return fluxes_xi

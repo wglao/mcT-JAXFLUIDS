@@ -1,6 +1,6 @@
 {
     "general": {
-        "case_name": "linearadvection",
+        "case_name": "mcT-adv",
         "save_path": "./results",
         "end_time": 2.0,
         "save_dt": 1.0

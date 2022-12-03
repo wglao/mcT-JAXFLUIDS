@@ -648,6 +648,5 @@ class SimulationManager:
         :return: _description_
         :rtype: Tuple[jnp.DeviceArray, jnp.DeviceArray]
         """
-
         return jax.vmap(self._feed_forward, in_axes=(0,0,None,None,None,None,None,None), out_axes=(0,0,))(
             batch_primes_init, batch_levelset_init, n_steps, timestep_size, t_start, output_freq, ml_parameters_dict, ml_networks_dict)

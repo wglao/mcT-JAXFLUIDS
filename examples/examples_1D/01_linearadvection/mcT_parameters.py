@@ -20,22 +20,19 @@ nx = int(nx)
 mc_alpha = 1e6
 noise_level = 0.02
 
-num_epochs = int(3e4)
+num_epochs = int(100)
 learning_rate = 1e-4
-batch_size = 40
+batch_size = 10
 ns = 1
 layers = 1
 n_units = 5000
 net_key = jrand.PRNGKey(0)
+
 # initial condition
-a_train_key = jrand.PRNGKey(1)
-b_train_key = jrand.PRNGKey(2)
-
-a_test_key = jrand.PRNGKey(3)
-b_test_key = jrand.PRNGKey(4)
-
-noise_key = jrand.PRNGKey(5)
+train_key = jrand.PRNGKey(1)
+test_key = jrand.PRNGKey(2)
+noise_key = jrand.PRNGKey(3)
 
 # sample set size
-num_train = 40
-num_test = 40
+num_train = 10
+num_test = 10
