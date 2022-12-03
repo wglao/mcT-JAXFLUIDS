@@ -1,6 +1,5 @@
 import numpy as np
 import jax.random as jrand
-import jax.numpy as jnp
 """parameters for initializing mcTangent"""
 
 # setup
@@ -36,3 +35,5 @@ noise_key = jrand.PRNGKey(3)
 # sample set size
 num_train = 10
 num_test = 10
+
+num_batches = int(np.ceil(num_train/batch_size))
