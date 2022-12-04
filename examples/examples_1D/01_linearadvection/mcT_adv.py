@@ -398,3 +398,6 @@ for nn in range(n_plot):
     if nn == 0:
         handles, labels = ax.get_legend_handles_labels()
         fig.legend(handles, labels, loc='upper center')
+
+plt.show()
+fig.savefig(os.path.join('figs',setup.case_name+'.png'))
