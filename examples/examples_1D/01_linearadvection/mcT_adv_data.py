@@ -48,17 +48,6 @@ class Data():
 
         return Sim(domain, case_setup, num_setup)
 
-    def _generate(self, *args):
-        case_setup = setup.cases.next()
-        num_setup = setup.numerical
-
-        input_reader = InputReader(case_setup, num_setup)
-        initializer  = Initializer(input_reader)
-        sim_manager  = SimulationManager(input_reader)
-
-        buffer_dictionary = initializer.initialization()
-        sim_manager.simulate(buffer_dictionary)
-
     def generate(self, reset=False):
         if reset:
             shutil.rmtree(self.save_path)
@@ -67,14 +56,18 @@ class Data():
         if self.size() < setup.cases.size():
             for _ in range(self.size()):
                 _ = setup.cases.next()
-            n_to_gen = jnp.arange(setup.cases.size() - self.size())
-            
-            # batch for parallel and vectorized generation
-            n_dev = jax.local_device_count()
-            batch_idx = jnp.linspace(0,n_to_gen.shape[0],n_dev+1)
-            n_to_gen_par = jnp.array([n_to_gen[ii:jj,...] for ii,jj in zip(batch_idx[:-1],batch_idx[1:])])
+            n_to_gen = setup.cases.size()
 
-            pmap(vmap(self._generate, in_axes=(0,)), in_axes=(0,))(n_to_gen_par)
+            for _ in range(n_to_gen):
+                case_setup = setup.cases.next()
+                num_setup = setup.numerical
+
+                input_reader = InputReader(case_setup, num_setup)
+                initializer  = Initializer(input_reader)
+                sim_manager  = SimulationManager(input_reader)
+
+                buffer_dictionary = initializer.initialization()
+                sim_manager.simulate(buffer_dictionary)
             
 
 data = Data(setup.save_path)
