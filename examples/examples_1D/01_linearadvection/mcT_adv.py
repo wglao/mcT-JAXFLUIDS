@@ -1,6 +1,6 @@
 from typing import Tuple, NamedTuple
 import time, os, wandb
-import shutil
+import shutil, functools
 import numpy as np
 import re
 import jax
@@ -128,23 +128,22 @@ def _get_loss_sample(params: hk.Params, *args) -> float:
         ml_primes_init = ml_primes_init.at[prime,...].set(jnp.reshape(ml_primes_buff[jnp.s_[ii,...]],(setup.nt-setup.ns,setup.nx,1,1)))
     
     # switch 0th axis to time for feed forward mapping
-    ml_primes_init = jnp.array([ml_primes_init[jnp.s_[:,t,:]] for t in range(ml_primes_init.shape[1])])
+    ml_primes_init = jnp.swapaxes(ml_primes_init,1,0)
+    # ml_primes_init = jnp.array([ml_primes_init[jnp.s_[:,t,:]] for t in range(ml_primes_init.shape[1])])
 
-    # batch for parallel execution
-    n_dev = jax.local_device_count()
-    batch_idx = jnp.linspace(0,ml_primes_init.shape[0],n_dev+1)
-    ml_primes_init_par = jnp.array([ml_primes_init[ii:jj,...] for ii,jj in zip(batch_idx[:-1],batch_idx[1:])])
-
-    ml_pred_arr, _ = pmap(sim_manager.feed_forward,in_axes=(0,0,None,None,None,None,None))(
-        batch_primes_init = ml_primes_init_par,
-        batch_levelset_init = jnp.empty_like(ml_primes_init_par), # not needed for single-phase, but is a required arg for feed_forward
-        n_steps = setup.ns+1,
-        timestep_size = coarse_case['general']['save_dt'],
-        t_start = 0,
-        ml_parameters_dict = ml_parameters_dict,
-        ml_networks_dict = ml_networks_dict
+    feed_forward = functools.partial(sim_manager.feed_forward,ml_parameters_dict=ml_parameters_dict,ml_networks_dict=ml_networks_dict)
+    ml_pred_arr, _ = feed_forward(
+        ml_primes_init,
+        jnp.empty_like(ml_primes_init), # not needed for single-phase, but is a required arg for feed_forward
+        setup.ns+1, coarse_case['general']['save_dt'], 0
     )
     
+    # ml_pred_arr, _ = sim_manager.feed_forward(
+    #     ml_primes_init,
+    #     jnp.empty_like(ml_primes_init), # not needed for single-phase, but is a required arg for feed_forward
+    #     setup.ns+1, coarse_case['general']['save_dt'], 0, ml_parameters_dict, ml_networks_dict
+    # )
+
     # ml loss
     # switch 0th axis to time for mapping
     ml_true_buff = jnp.array([data_dict_coarse[key] for key in data_dict_coarse.keys()])[jnp.s_[:,1:,:]]
@@ -174,7 +173,7 @@ def _get_loss_sample(params: hk.Params, *args) -> float:
         
          # batch for parallel execution
         batch_idx = jnp.linspace(0,mc_primes_init.shape[0],n_dev+1)
-        mc_primes_init_par = jnp.array([mc_primes_init[ii:jj,...] for ii,jj in zip(batch_idx[:-1],batch_idx[1:])])
+        mc_primes_init_par = jnp.array([mc_primes_init[int(ii):int(jj),...] for ii,jj in zip(batch_idx[:-1],batch_idx[1:])])
 
         mc_pred_arr, _ = pmap(sim_manager.feed_forward, in_axes=(0,0,None,None,None))(
             batch_primes_init = mc_primes_init_par,
@@ -203,7 +202,8 @@ def get_loss_batch(params: hk.Params) -> float:
     ----- returns -----\n
     :return loss_batch: average loss over batch
     """
-    return jnp.mean(vmap(_get_loss_sample,in_axes=(None,0))(params,jnp.arange(setup.batch_size)))
+    samples = jnp.arange(setup.batch_size)
+    return jnp.mean(vmap(functools.partial(_get_loss_sample,params),in_axes=(0,))(samples))
 
 def _evaluate_sample(params: hk.Params, *args) -> jnp.ndarray:
     """
@@ -266,12 +266,8 @@ def evaluate_epoch(params: hk.Params) -> float:
     ----- returns -----\n
     :return epoch_err: mean squared error for the epoch
     """
-    # batch for parallel execution
     samples = jnp.arange(setup.num_test)
-    n_dev = jax.local_device_count()
-    batch_idx = jnp.linspace(0,samples.shape[0],n_dev+1)
-    samples_par = jnp.array([samples[ii:jj,...] for ii,jj in zip(batch_idx[:-1],batch_idx[1:])])
-    return jnp.mean(pmap(vmap(_evaluate_sample, in_axes=(None,0)), in_axes=(None,0))(params,samples_par))
+    return jnp.mean(vmap(functools.partial(_evaluate_sample, params), in_axes=(0,))(samples))
 
 def Train(state: TrainingState) -> Tuple[TrainingState,TrainingState]:
     """
