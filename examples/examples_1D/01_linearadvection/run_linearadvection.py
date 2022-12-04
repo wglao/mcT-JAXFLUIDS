@@ -4,7 +4,7 @@ from jaxfluids.post_process import load_data, create_lineplot
 import jax.numpy as jnp
 
 # SETUP SIMULATION
-input_reader = InputReader("linearadvection.json", "numerical_setup.json")
+input_reader = InputReader("mcT_adv.json", "numerical_setup.json")
 initializer  = Initializer(input_reader)
 sim_manager  = SimulationManager(input_reader)
 

@@ -58,7 +58,8 @@ class mcTangentNN(RiemannSolver):
 
         # EVALUATE NEURAL NETWORK FOR TANGENT MANIFOLD
         try:
-            fluxes_xi = net.apply(params, jnp.array([primes_L, primes_R, cons_L, cons_R]))
+            primes = jnp.mean(jnp.array([primes_L, primes_R]),axis=0)
+            fluxes_xi = net.apply(params, primes)
+            return fluxes_xi
         except Exception as e:
             print(e)
-        return fluxes_xi
