@@ -129,7 +129,6 @@ def _get_loss_sample(params: hk.Params, *args) -> float:
     
     # switch 0th axis to time for feed forward mapping
     ml_primes_init = jnp.swapaxes(ml_primes_init,1,0)
-    # ml_primes_init = jnp.array([ml_primes_init[jnp.s_[:,t,:]] for t in range(ml_primes_init.shape[1])])
 
     feed_forward = functools.partial(sim_manager.feed_forward,ml_parameters_dict=ml_parameters_dict,ml_networks_dict=ml_networks_dict)
     ml_pred_arr, _ = feed_forward(
@@ -137,12 +136,6 @@ def _get_loss_sample(params: hk.Params, *args) -> float:
         jnp.empty_like(ml_primes_init), # not needed for single-phase, but is a required arg for feed_forward
         setup.ns+1, coarse_case['general']['save_dt'], 0
     )
-    
-    # ml_pred_arr, _ = sim_manager.feed_forward(
-    #     ml_primes_init,
-    #     jnp.empty_like(ml_primes_init), # not needed for single-phase, but is a required arg for feed_forward
-    #     setup.ns+1, coarse_case['general']['save_dt'], 0, ml_parameters_dict, ml_networks_dict
-    # )
 
     # ml loss
     # switch 0th axis to time for mapping
@@ -170,17 +163,11 @@ def _get_loss_sample(params: hk.Params, *args) -> float:
         
         #  map over times, concatenate all sequences
         mc_primes_init = jnp.concatenate(ml_pred_arr[jnp.s_[:,:-1,...]])
-        
-         # batch for parallel execution
-        batch_idx = jnp.linspace(0,mc_primes_init.shape[0],n_dev+1)
-        mc_primes_init_par = jnp.array([mc_primes_init[int(ii):int(jj),...] for ii,jj in zip(batch_idx[:-1],batch_idx[1:])])
 
-        mc_pred_arr, _ = pmap(sim_manager.feed_forward, in_axes=(0,0,None,None,None))(
-            batch_primes_init = mc_primes_init_par,
-            batch_levelset_init = jnp.empty_like(mc_primes_init_par), # not needed for single-phase, but is a required arg
-            n_steps = 1,
-            timestep_size = coarse_case['general']['save_dt'],
-            t_start = 0
+        mc_pred_arr, _ = sim_manager.feed_forward(
+            mc_primes_init,
+            jnp.empty_like(mc_primes_init), # not needed for single-phase, but is a required arg
+            1, coarse_case['general']['save_dt'], 0
         )
         
         # mc loss
