@@ -14,7 +14,7 @@ class Cases():
     def __init__(self,cases: list):
         self.cases = cases
     
-    def next(self):
+    def next(self) -> dict:
         """
         pops last case
         """
