@@ -7,7 +7,7 @@ import jax
 import jax.numpy as jnp
 import jax.random as jrand
 import jax.image as jim
-from jax import value_and_grad, vmap, jit, lax
+from jax import value_and_grad, vmap, jit, lax, pmap
 import json
 import pickle
 import haiku as hk
@@ -34,6 +34,7 @@ Run JAX-Fluids to train mcTangent:
                 2b5) get total loss = loss_ml + mc_alpha*loss_mc
     3) loss = mean(all losses)
     4) update params
+Evaluate against validation set to get error
 Visualize results
 """
 
@@ -128,16 +129,21 @@ def _get_loss_sample(params: hk.Params, *args) -> float:
     
     # switch 0th axis to time for feed forward mapping
     ml_primes_init = jnp.array([ml_primes_init[jnp.s_[:,t,:]] for t in range(ml_primes_init.shape[1])])
-    # ml_primes_init_batched = [ml_primes_init[bb*5:(bb+1)*5,...] for bb in ]
-    ml_pred_arr, _ = sim_manager.feed_forward( # [ml_pred_arr] = [nt-ns seq, ns+2 times, primes, nx cells]
-        batch_primes_init = ml_primes_init,
-        batch_levelset_init = jnp.empty_like(ml_primes_init), # not needed for single-phase, but is a required arg for feed_forward
+
+    # batch for parallel execution
+    n_dev = jax.local_device_count()
+    batch_idx = jnp.linspace(0,ml_primes_init.shape[0],n_dev+1)
+    ml_primes_init_par = jnp.array([ml_primes_init[ii:jj,...] for ii,jj in zip(batch_idx[:-1],batch_idx[1:])])
+
+    ml_pred_arr, _ = pmap(sim_manager.feed_forward,in_axes=(0,0,None,None,None,None,None))(
+        batch_primes_init = ml_primes_init_par,
+        batch_levelset_init = jnp.empty_like(ml_primes_init_par), # not needed for single-phase, but is a required arg for feed_forward
         n_steps = setup.ns+1,
         timestep_size = coarse_case['general']['save_dt'],
         t_start = 0,
         ml_parameters_dict = ml_parameters_dict,
         ml_networks_dict = ml_networks_dict
-        )
+    )
     
     # ml loss
     # switch 0th axis to time for mapping
@@ -165,14 +171,18 @@ def _get_loss_sample(params: hk.Params, *args) -> float:
         
         #  map over times, concatenate all sequences
         mc_primes_init = jnp.concatenate(ml_pred_arr[jnp.s_[:,:-1,...]])
-        # [mc_primes_init] = [(nt-ns-1)*(ns+1), primes, nx cells]
-        mc_pred_arr, _ = sim_manager.feed_forward( # [mc_pred_arr] = [(nt-ns-1)*(ns+1), 2, primes, nx cells]
-            batch_primes_init = mc_primes_init,
-            batch_levelset_init = jnp.empty_like(mc_primes_init), # not needed for single-phase, but is a required arg
+        
+         # batch for parallel execution
+        batch_idx = jnp.linspace(0,mc_primes_init.shape[0],n_dev+1)
+        mc_primes_init_par = jnp.array([mc_primes_init[ii:jj,...] for ii,jj in zip(batch_idx[:-1],batch_idx[1:])])
+
+        mc_pred_arr, _ = pmap(sim_manager.feed_forward, in_axes=(0,0,None,None,None))(
+            batch_primes_init = mc_primes_init_par,
+            batch_levelset_init = jnp.empty_like(mc_primes_init_par), # not needed for single-phase, but is a required arg
             n_steps = 1,
             timestep_size = coarse_case['general']['save_dt'],
             t_start = 0
-            )
+        )
         
         # mc loss
         mc_loss_arr = vmap(_mse,in_axes=(0,0))(
@@ -256,7 +266,12 @@ def evaluate_epoch(params: hk.Params) -> float:
     ----- returns -----\n
     :return epoch_err: mean squared error for the epoch
     """
-    return jnp.mean(vmap(_evaluate_sample, in_axes=(None,0))(params,jnp.arange(setup.num_test)))
+    # batch for parallel execution
+    samples = jnp.arange(setup.num_test)
+    n_dev = jax.local_device_count()
+    batch_idx = jnp.linspace(0,samples.shape[0],n_dev+1)
+    samples_par = jnp.array([samples[ii:jj,...] for ii,jj in zip(batch_idx[:-1],batch_idx[1:])])
+    return jnp.mean(pmap(vmap(_evaluate_sample, in_axes=(None,0)), in_axes=(None,0))(params,samples_par))
 
 def Train(state: TrainingState) -> Tuple[TrainingState,TrainingState]:
     """
