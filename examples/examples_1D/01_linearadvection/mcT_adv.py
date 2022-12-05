@@ -65,7 +65,7 @@ def mcT_fn(state: jnp.ndarray) -> jnp.ndarray:
 
 def save_params(params, path):
     params = jax.device_get(params)
-    os.makedirs(os.path.dirname)
+    os.makedirs(os.path.dirname(path))
     with open(path, 'wb') as fp:
         pickle.dump(params, fp)
 
