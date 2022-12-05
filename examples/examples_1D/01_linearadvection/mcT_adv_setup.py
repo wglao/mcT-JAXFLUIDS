@@ -61,15 +61,6 @@ num_train = 10
 num_test = 10
 num_batches = int(np.ceil(num_train/batch_size))
 
-# random coefficients for initial conditions
-def pos_coefs(seed: int, out_shape: Union[tuple,int]) -> jnp.ndarray:
-    """
-    provides an array of strictly positive coefficients
-    """
-    key = jrand.PRNGKey(seed)
-    if type(out_shape) == int:
-        return jnp.square(jrand.normal(key,(out_shape,))) + jnp.finfo(jnp.float32).eps #strictly positive
-    return jnp.square(jrand.normal(key,out_shape)) + jnp.finfo(jnp.float32).eps #strictly positive
 
 # edit case setup
 f = open(case_name+'.json','r')
@@ -85,19 +76,6 @@ case_base['domain']['x']['range'][1] = x_max
 
 seeds_to_gen = np.arange(num_batches*batch_size+num_train+1)
 # case_arr = np.empty(len(seeds_to_gen), dtype=object)
-case_list = []
-for seed in seeds_to_gen:
-    case_new = case_base
-    coefs = pos_coefs(seed,5)
-    case_new['initial_condition']['rho'] = "lambda x: 1+"+\
-        "((x>=0.2) & (x<=0.4)) * ( "+str(coefs[0])+"*(np.exp(-334.477 * (x-0.3-0.005)**2) + np.exp(-334.477 * (x - 0.3 + 0.005)**2) + 4 * np.exp(-334.477 * (x - 0.3)**2))) + "+\
-        "((x>=0.6) & (x<=0.8)) * "+str(coefs[1])+" + "+\
-        "((x>=1.0) & (x<=1.2)) * ("+str(coefs[2])+" - np.abs(10 * (x - 1.1))) + "+\
-        "((x>=1.4) & (x<=1.6)) * ("+str(coefs[3])+"* (np.sqrt(np.maximum( 1 - 100 * (x - 1.5 - 0.005)**2, 0)) + np.sqrt(np.maximum( 1 - 100 * (x - 1.5 + 0.005)**2, 0)) + 4 * np.sqrt(np.maximum( 1 - 100 * (x - 1.5)**2, 0))) ) + "+\
-        "~( ((x>=0.2) & (x<=0.4)) | ((x>=0.6) & (x<=0.8)) | ((x>=1.0) & (x<=1.2)) | ((x>=1.4) & (x<=1.6)) ) *"+str(coefs[4])
-    case_list.append(case_new)
-
-cases = Cases(case_list)
 
 # edit numerical setup
 f = open('numerical_setup.json','r')
@@ -106,6 +84,33 @@ f.close()
 
 numerical['conservatives']['time_integration']['fixed_timestep'] = 0.1*dt
 numerical['conservatives']['convective_fluxes']['riemann_solver'] = "HLLC"
+
+# random coefficients for initial conditions
+def pos_coefs(seed: int, out_shape: Union[tuple,int]) -> jnp.ndarray:
+    """
+    provides an array of strictly positive coefficients
+    """
+    key = jrand.PRNGKey(seed)
+    if type(out_shape) == int:
+        return jnp.square(jrand.normal(key,(out_shape,))) + jnp.finfo(jnp.float32).eps #strictly positive
+    return jnp.square(jrand.normal(key,out_shape)) + jnp.finfo(jnp.float32).eps #strictly positive
+
+def get_cases() -> Cases:
+    case_list = []
+    for seed in seeds_to_gen:
+        case_new = case_base
+        coefs = pos_coefs(seed,5)
+        case_new['initial_condition']['rho'] = "lambda x: 1+"+\
+            "((x>=0.2) & (x<=0.4)) * ( {c0}*(np.exp(-334.477 * (x-0.3-0.005)**2) + np.exp(-334.477 * (x - 0.3 + 0.005)**2) + 4 * np.exp(-334.477 * (x - 0.3)**2))) + "+\
+            "((x>=0.6) & (x<=0.8)) * {c1} + "+\
+            "((x>=1.0) & (x<=1.2)) * ({c2} - np.abs(10 * (x - 1.1))) + "+\
+            "((x>=1.4) & (x<=1.6)) * ({c3}* (np.sqrt(np.maximum( 1 - 100 * (x - 1.5 - 0.005)**2, 0)) + np.sqrt(np.maximum( 1 - 100 * (x - 1.5 + 0.005)**2, 0)) + 4 * np.sqrt(np.maximum( 1 - 100 * (x - 1.5)**2, 0))) ) + "+\
+            "~( ((x>=0.2) & (x<=0.4)) | ((x>=0.6) & (x<=0.8)) | ((x>=1.0) & (x<=1.2)) | ((x>=1.4) & (x<=1.6)) ) *{c4}".format(coefs)
+        case_list.append(case_new)
+
+    return Cases(case_list)
+
+cases = get_cases()
 
 # uploading wandb
 wandb.init(project="mcTangent")
