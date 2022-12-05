@@ -37,7 +37,7 @@ Run JAX-Fluids to train mcTangent:
 Evaluate against validation set to get error
 Visualize results
 """
-work = functools.partial(os.path.join,'./')
+setup.work = functools.partial(os.path.join,'./')
 results_path = work('results')
 test_path = work('test')
 param_path = work("network/parameters")
