@@ -295,7 +295,7 @@ def Train(state: TrainingState) -> Tuple[TrainingState,TrainingState]:
         t2 = time.time()
         
         # save in case job is canceled, can resume
-        save_params(state.params,os.path.join('network','parameters','last.pkl'))
+        save_params(state.params,os.path.join(param_path,'last.pkl'))
 
         test_err = evaluate_epoch(state.params)
         
