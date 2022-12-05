@@ -53,7 +53,7 @@ noise_level = 0.02 if noise_flag else 0
 
 num_epochs = int(100)
 learning_rate = 1e-4
-batch_size = 2
+batch_size = 4
 ns = 1
 layers = 1
 
@@ -100,13 +100,15 @@ def get_cases() -> Cases:
     case_list = []
     for seed in seeds_to_gen:
         case_new = case_base
-        coefs = pos_coefs(seed,5)
-        case_new['initial_condition']['rho'] = "lambda x: 1+"+\
+        coefs = pos_coefs(seed,2)
+        rho0 = "lambda x: 1+"+\
             "((x>=0.2) & (x<=0.4)) * ( {0}*(np.exp(-334.477 * (x-0.3-0.005)**2) + np.exp(-334.477 * (x - 0.3 + 0.005)**2) + 4 * np.exp(-334.477 * (x - 0.3)**2))) + "+\
             "((x>=0.6) & (x<=0.8)) * {1} + "+\
             "((x>=1.0) & (x<=1.2)) * ({2} - np.abs(10 * (x - 1.1))) + "+\
             "((x>=1.4) & (x<=1.6)) * ({3}* (np.sqrt(np.maximum( 1 - 100 * (x - 1.5 - 0.005)**2, 0)) + np.sqrt(np.maximum( 1 - 100 * (x - 1.5 + 0.005)**2, 0)) + 4 * np.sqrt(np.maximum( 1 - 100 * (x - 1.5)**2, 0))) ) + "+\
-            "~( ((x>=0.2) & (x<=0.4)) | ((x>=0.6) & (x<=0.8)) | ((x>=1.0) & (x<=1.2)) | ((x>=1.4) & (x<=1.6)) ) *{4}".format(*coefs)
+            "~( ((x>=0.2) & (x<=0.4)) | ((x>=0.6) & (x<=0.8)) | ((x>=1.0) & (x<=1.2)) | ((x>=1.4) & (x<=1.6)) ) *{4}"
+        case_new['initial_condition']['rho'] = rho0.format(*coefs)
+
         case_list.append(case_new)
 
     return Cases(case_list)
