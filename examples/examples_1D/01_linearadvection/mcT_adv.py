@@ -239,6 +239,9 @@ def _evaluate_sample(params: hk.Params, *args) -> jnp.ndarray:
     _, _, _, data_dict_mcT = load_data(path, quantities)
     sample_err = _mse(data_dict_mcT['density'][:,:,0,0] - data_dict_coarse['density'][:,:,0,0])
 
+    # clean
+    shutil.rmtree('results')
+
     return sample_err
 
 def evaluate_epoch(params: hk.Params) -> float:
@@ -395,5 +398,5 @@ for nn in range(n_plot):
         handles, labels = ax.get_legend_handles_labels()
         fig.legend(handles, labels, loc='upper center')
 
-plt.show()
+# plt.show()
 fig.savefig(os.path.join('figs',setup.case_name+'.png'))

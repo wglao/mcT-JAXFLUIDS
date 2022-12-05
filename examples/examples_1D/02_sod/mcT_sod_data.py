@@ -7,7 +7,7 @@ from jaxfluids import InputReader, Initializer, SimulationManager
 from jaxfluids.post_process import load_data, create_lineplot
 import jax.numpy as jnp
 
-import mcT_adv_setup as setup
+import mcT_sod_setup as setup
 
 class Sim(NamedTuple):
 

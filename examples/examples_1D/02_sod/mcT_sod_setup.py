@@ -27,7 +27,7 @@ class Cases():
         return len(self.cases)
 
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-case_name = 'mcT_adv'
+case_name = 'mcT_sod'
 
 # data only
 mc_flag = False
@@ -88,14 +88,9 @@ seeds_to_gen = np.arange(num_batches*batch_size+num_train+1)
 case_list = []
 for seed in seeds_to_gen:
     case_new = case_base
-    coefs = pos_coefs(seed,5)
-    case_new['initial_condition']['rho'] = "lambda x: 1+"+\
-        "((x>=0.2) & (x<=0.4)) * ( "+str(coefs[0])+"*(np.exp(-334.477 * (x-0.3-0.005)**2) + np.exp(-334.477 * (x - 0.3 + 0.005)**2) + 4 * np.exp(-334.477 * (x - 0.3)**2))) + "+\
-        "((x>=0.6) & (x<=0.8)) * "+str(coefs[1])+" + "+\
-        "((x>=1.0) & (x<=1.2)) * ("+str(coefs[2])+" - np.abs(10 * (x - 1.1))) + "+\
-        "((x>=1.4) & (x<=1.6)) * ("+str(coefs[3])+"* (np.sqrt(np.maximum( 1 - 100 * (x - 1.5 - 0.005)**2, 0)) + np.sqrt(np.maximum( 1 - 100 * (x - 1.5 + 0.005)**2, 0)) + 4 * np.sqrt(np.maximum( 1 - 100 * (x - 1.5)**2, 0))) ) + "+\
-        "~( ((x>=0.2) & (x<=0.4)) | ((x>=0.6) & (x<=0.8)) | ((x>=1.0) & (x<=1.2)) | ((x>=1.4) & (x<=1.6)) ) *"+str(coefs[4])
-    case_list.append(case_new)
+    coefs = jnp.sort(pos_coefs(seed,5))
+    case_new['initial_condition']['rho'] = "lambda x: {c4}*(x <= {c2}) + {c1}*(x > {c2})".format(coefs[4],coefs[2],coefs[1],coefs[2])
+    case_new['initial_condition']['p'] = "lambda x: {c3}*(x <= {c2}) + {c0}*(x > {c2})".format(coefs[3],coefs[2],coefs[0],coefs[2])
 
 cases = Cases(case_list)
 
