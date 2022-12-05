@@ -37,6 +37,10 @@ Run JAX-Fluids to train mcTangent:
 Evaluate against validation set to get error
 Visualize results
 """
+results_path = 'results'
+test_path = 'test'
+param_path = "network/parameters"
+
 
 # %% create mcTangent network and training functions
 class TrainingState(NamedTuple):
@@ -216,7 +220,7 @@ def _evaluate_sample(params: hk.Params, *args) -> jnp.ndarray:
     coarse_case = fine_sim.case
     coarse_num = fine_sim.numerical
     coarse_case['general']['case_name'] = 'test_mcT'
-    coarse_case['general']['save_path'] = 'results'
+    coarse_case['general']['save_path'] = test_path
     coarse_case['domain']['x']['cells'] = setup.nx
     coarse_num['conservatives']['time_integration']['fixed_timestep'] = setup.dt
     coarse_num['conservatives']['convective_fluxes']['riemann_solver'] = "MCTANGENT"
@@ -310,7 +314,6 @@ mcT_net = hk.without_apply_rng(hk.transform(mcT_fn))
 
 data_init = jnp.empty((5,setup.nx+1,1,1))
 optimizer = optax.adam(setup.learning_rate)
-param_path = "network/parameters"
 if os.path.exists(os.path.join(param_path,'last.pkl')):
     initial_params = load_params(os.path.join(param_path,'last.pkl'))
 else:
@@ -336,6 +339,7 @@ x_fine, _, times, data_dict_fine = load_data(fine_sim.domain, quantities)
 # coarse
 coarse_case = fine_sim.case
 coarse_num = fine_sim.numerical
+coarse_case['general']['save_path'] = results_path
 coarse_case['domain']['x']['cells'] = setup.dx
 coarse_num['conservatives']['time_integration']['fixed_timestep'] = setup.dt
 input_reader = InputReader(coarse_case,coarse_num)
@@ -348,11 +352,10 @@ path = sim_manager.output_writer.save_path_domain
 quantities = ['density']
 x_coarse, _, _, data_dict_coarse = load_data(path, quantities)
 
-# best state
 coarse_num['conservatives']['convective_fluxes']['riemann_solver'] = "MCTANGENT"
 
+# best state
 params_best = load_params(os.path.join(param_path,"best.pkl"))
-params_end = load_params(os.path.join(param_path,"end.pkl"))
 
 ml_parameters_dict = {"riemann_solver":params_best}
 ml_networks_dict = hk.data_structures.to_immutable_dict({"riemannsolver": mcT_net})
@@ -371,6 +374,7 @@ path = sim_manager.output_writer.save_path_domain
 _, _, _, data_dict_best = load_data(path, quantities)
 
 # end state
+params_end = load_params(os.path.join(param_path,"end.pkl"))
 ml_parameters_dict = {"riemann_solver":params_end}
 buffer_dictionary['machinelearning_modules']['ml_parameters_dict'] = ml_parameters_dict
 sim_manager.simulate(buffer_dictionary)

@@ -6,6 +6,7 @@ import numpy as np
 import jax.random as jrand
 import jax.numpy as jnp
 """parameters for initializing mcTangent"""
+save_path = 'data'
 
 class Cases():
     """
@@ -75,7 +76,6 @@ f = open(case_name+'.json','r')
 case_base = json.load(f)
 f.close()
 
-save_path = 'data'
 case_base['general']['save_path'] = save_path
 case_base['general']['end_time'] = t_max
 case_base['general']['save_dt'] = dt
