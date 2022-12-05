@@ -63,16 +63,18 @@ def mcT_fn(state: jnp.ndarray) -> jnp.ndarray:
     flux = jnp.reshape(flux,(n_fields,n_faces,1,1))
     return flux
 
-def save_params(params, path):
+def save_params(params, path) -> None:
     params = jax.device_get(params)
     os.makedirs(os.path.dirname(path))
     with open(path, 'wb') as fp:
         pickle.dump(params, fp)
+        fp.close()
 
 def load_params(path):
     assert os.path.exists(path), "Specified parameter save path does not exist"
     with open(path, 'rb') as fp:
         params = pickle.load(fp)
+        fp.close()
     return jax.device_put(params)
 
 def _mse(pred: jnp.ndarray, true: Optional[jnp.ndarray] = None) -> float:
