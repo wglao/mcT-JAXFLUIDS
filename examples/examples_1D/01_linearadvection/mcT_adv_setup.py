@@ -1,12 +1,13 @@
 from typing import Union, Tuple, NamedTuple
-import os
+import os, functools
 import json
 import wandb
 import numpy as np
 import jax.random as jrand
 import jax.numpy as jnp
 """parameters for initializing mcTangent"""
-save_path = 'data'
+work = functools.partial(os.path.join,'./')
+save_path = work('data')
 
 class Cases():
     """
