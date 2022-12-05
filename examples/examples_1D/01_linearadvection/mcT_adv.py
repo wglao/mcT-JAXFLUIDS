@@ -247,7 +247,7 @@ def _evaluate_sample(params: hk.Params, *args) -> jnp.ndarray:
     sample_err = _mse(data_dict_mcT['density'][:,:,0,0] - data_dict_coarse['density'][:,:,0,0])
 
     # clean
-    os.system('rm -rf {results_path}/*'.format(results_path))
+    os.system('rm -rf {}/*'.format(results_path))
 
     return sample_err
 
