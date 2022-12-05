@@ -65,7 +65,7 @@ def mcT_fn(state: jnp.ndarray) -> jnp.ndarray:
 
 def save_params(params, path) -> None:
     params = jax.device_get(params)
-    os.makedirs(os.path.dirname(path))
+    os.makedirs(os.path.dirname(path),exist_ok=True)
     with open(path, 'wb') as fp:
         pickle.dump(params, fp)
         fp.close()
@@ -247,7 +247,7 @@ def _evaluate_sample(params: hk.Params, *args) -> jnp.ndarray:
     sample_err = _mse(data_dict_mcT['density'][:,:,0,0] - data_dict_coarse['density'][:,:,0,0])
 
     # clean
-    shutil.rmtree('results')
+    shutil.rmtree(results_path)
 
     return sample_err
 
