@@ -60,7 +60,7 @@ def mcT_fn(state: jnp.ndarray) -> jnp.ndarray:
 
 def save_params(params, path):
     params = jax.device_get(params)
-    os.makedirs(path)
+    os.makedirs(os.path.dirname)
     with open(path, 'wb') as fp:
         pickle.dump(params, fp)
 
@@ -286,6 +286,9 @@ def Train(state: TrainingState) -> Tuple[TrainingState,TrainingState]:
             params_new = optax.apply_updates(state.params, updates)
             state = TrainingState(params_new,opt_state_new,state.loss + loss_batch/setup.num_batches)
         t2 = time.time()
+        
+        # save in case job is canceled, can resume
+        save_params(state.params,os.path.join('network','parameters','last.pkl'))
 
         test_err = evaluate_epoch(state.params)
         
@@ -297,7 +300,7 @@ def Train(state: TrainingState) -> Tuple[TrainingState,TrainingState]:
         if epoch % 10 == 0:  # Print every 10 epochs
             print("time {:.2e}s loss {:.2e} TE {:.2e}  TE_min {:.2e} EPmin {:d} EP {} ".format(
                     t2 - t1, state.loss, test_err, min_err, epoch_min, epoch))
-
+        
         dat.data.check_sims()
         wandb.log({"Train loss": float(state.loss), "Test Error": float(test_err), 'TEST MIN': float(min_err), 'Epoch' : float(epoch)})
     return best_state, state
@@ -307,16 +310,20 @@ mcT_net = hk.without_apply_rng(hk.transform(mcT_fn))
 
 data_init = jnp.empty((5,setup.nx+1,1,1))
 optimizer = optax.adam(setup.learning_rate)
-initial_params = mcT_net.init(jrand.PRNGKey(0), data_init)
+param_path = "network/parameters"
+if os.path.exists(os.path.join(param_path,'last.pkl')):
+    initial_params = load_params(os.path.join(param_path,'last.pkl'))
+else:
+    initial_params = mcT_net.init(jrand.PRNGKey(0), data_init)
 initial_opt_state = optimizer.init(initial_params)
+
 state = TrainingState(initial_params, initial_opt_state, 0)
 
 best_state, end_state = Train(state)
 
 # save params
-param_path = "network/parameters"
-save_params(best_state.params,os.path.join(param_path,"best"))
-save_params(end_state.params,os.path.join(param_path,"end"))
+save_params(best_state.params,os.path.join(param_path,"best.pkl"))
+save_params(end_state.params,os.path.join(param_path,"end.pkl"))
 
 # %% visualize best and end state
 
@@ -344,8 +351,8 @@ x_coarse, _, _, data_dict_coarse = load_data(path, quantities)
 # best state
 coarse_num['conservatives']['convective_fluxes']['riemann_solver'] = "MCTANGENT"
 
-params_best = load_params(os.path.join(param_path,"best"))
-params_end = load_params(os.path.join(param_path,"end"))
+params_best = load_params(os.path.join(param_path,"best.pkl"))
+params_end = load_params(os.path.join(param_path,"end.pkl"))
 
 ml_parameters_dict = {"riemann_solver":params_best}
 ml_networks_dict = hk.data_structures.to_immutable_dict({"riemannsolver": mcT_net})
