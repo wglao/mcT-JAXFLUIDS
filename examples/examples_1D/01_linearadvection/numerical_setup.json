@@ -39,8 +39,9 @@
             "primes": [
                 "density",
                 "velocityX",
-                "pressure",
-                "temperature"
+                "velocityY",
+                "velocityZ",
+                "pressure"
             ]
         }
     }
