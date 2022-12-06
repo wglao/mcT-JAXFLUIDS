@@ -76,7 +76,12 @@ def load_params(path):
         fp.close()
     return jax.device_put(params)
 
-def _mse(pred: jnp.ndarray, true: Optional[jnp.ndarray] = None) -> float:
+@jit
+def _mse(array: jnp.ndarray):
+    return jnp.mean(jnp.square(array))
+
+@jit
+def mse(pred: jnp.ndarray, true: Optional[jnp.ndarray] = None) -> float:
     """
     calculates the mean squared error between a prediction and the ground truth
     if only one argument is provided, it is taken to be the error array (pred-true)
@@ -89,29 +94,41 @@ def _mse(pred: jnp.ndarray, true: Optional[jnp.ndarray] = None) -> float:
     :return mse: mean squared error between pred and true
     """
     if true is None:
-        true = jnp.zeros(pred.shape)
-    return jnp.mean(jnp.square(pred - true))
+        return _mse(pred)
+    return _mse(pred - true)
 
-def _get_loss_sample(params: hk.Params, *args) -> float:
+@functools.partial(jit,static_argnums=[2])
+def _add_noise(arr: jnp.ndarray, seed: int, noise_level: float):
+    noise_arr = jrand.normal(jrand.PRNGKey(seed),arr.shape)
+    noise_arr *= noise_level/jnp.max(noise_arr)
+    return arr * (1+noise_arr)
+
+def add_noise(arr: jnp.ndarray, seed: int):
+    return functools.partial(_add_noise,noise_level=setup.noise_level)(arr,seed)
+
+def _get_loss_sample(params: hk.Params, sample) -> float:
     """
     Uses a highly resolved simulation as ground truth to calculate loss over a sample
     
     ----- inputs -----\n
     :param params: holds parameters of the NN
-    :param args: allows for mapping input for vmap api
+    :param sample: allows for mapping input for vmap api, used as the seed number if noise flag is True
 
     ----- returns -----\n
     :return loss_sample: average loss over all sequences in the sample
     """
     # load fine simulation
     fine_sim = dat.data.next_sim()
-    quantities = ['density','velocityX','temperature']
+    quantities = ['density','velocityX','velocityY','velocityZ','pressure']
     _, _, _, data_dict_fine = load_data(fine_sim.domain, quantities)
     # coarse sampling
     data_dict_coarse = {}
     for quant in quantities:
         data_fine = data_dict_fine[quant]
         data_dict_coarse[quant] = jim.resize(data_fine,(setup.nt+1,setup.nx,1,1),"linear")
+        if setup.noise_flag:
+            seed_arr = jrand.randint(jrand.PRNGKey(sample),(setup.nt+1,),1,setup.nt+1)
+            data_dict_coarse[quant] = vmap(add_noise,in_axes=(0,0))(data_dict_coarse[quant],seed_arr)
 
     # feed forward with mcTangent ns+1 steps
     coarse_case = fine_sim.case
@@ -126,10 +143,7 @@ def _get_loss_sample(params: hk.Params, *args) -> float:
     input_reader = InputReader(coarse_case,coarse_num)
     sim_manager = SimulationManager(input_reader)
 
-    ml_primes_buff = jnp.array([data_dict_coarse[key] for key in data_dict_coarse.keys()])[jnp.s_[:,:setup.nt-setup.ns,...]]
-    ml_primes_init = jnp.zeros((5,setup.nt-setup.ns,setup.nx,1,1))
-    for ii, prime in enumerate([0,1,4]):
-        ml_primes_init = ml_primes_init.at[prime,...].set(jnp.reshape(ml_primes_buff[jnp.s_[ii,...]],(setup.nt-setup.ns,setup.nx,1,1)))
+    ml_primes_init = jnp.array([data_dict_coarse[key] for key in data_dict_coarse.keys()])[jnp.s_[:,:setup.nt-setup.ns,...]]
     
     # switch 0th axis to time for feed forward mapping
     ml_primes_init = jnp.swapaxes(ml_primes_init,1,0)
@@ -142,16 +156,11 @@ def _get_loss_sample(params: hk.Params, *args) -> float:
     )
 
     # ml loss
-    # switch 0th axis to time for mapping
-    ml_true_buff = jnp.array([data_dict_coarse[key] for key in data_dict_coarse.keys()])[jnp.s_[:,1:,:]]
-    ml_true = jnp.zeros((5,setup.nt,setup.nx,1,1))
-    for ii, prime in enumerate([0,1,4]):
-        ml_true = ml_true.at[prime,...].set(jnp.reshape(ml_true_buff[jnp.s_[ii,...]],(setup.nt,setup.nx,1,1)))
-    
-    ml_true = jnp.array([ml_true[jnp.s_[:,t,:]] for t in range(ml_true.shape[1])])
+    ml_true = jnp.array([data_dict_coarse[key] for key in data_dict_coarse.keys()])[jnp.s_[:,1:,:]]
+    ml_true = jnp.swapaxes(ml_true,1,0)
     ml_true_arr = jnp.array([ml_true[jnp.s_[seq:seq+setup.ns+1,...]] for seq in range(setup.nt-setup.ns)])
     # [ml_true_arr] = [nt-ns seq, primes, ns+1 times, nx cells]
-    ml_loss_arr = vmap(_mse,in_axes=(0,0))(
+    ml_loss_arr = vmap(mse,in_axes=(0,0))(
         # [map over seq, all vars, from time 1 to end of seq, all cells]
         ml_pred_arr[jnp.s_[:,1:,...]],
         ml_true_arr
@@ -175,8 +184,10 @@ def _get_loss_sample(params: hk.Params, *args) -> float:
         )
         
         # mc loss
-        mc_loss_arr = vmap(_mse,in_axes=(0,0))(
-            jnp.concatenate(ml_pred_arr[jnp.s_[:,1:,...]]),
+        ml_pred_reshape = jnp.concatenate(ml_pred_arr[jnp.s_[:,1:,...]])
+        print(ml_pred_reshape-mc_pred_arr[jnp.s_[:,-1,...]])
+        mc_loss_arr = vmap(mse,in_axes=(0,0))(
+            ml_pred_reshape,
             mc_pred_arr[jnp.s_[:,-1,...]]
         )
         mc_loss_sample = setup.mc_alpha*jnp.mean(mc_loss_arr)
@@ -193,8 +204,10 @@ def get_loss_batch(params: hk.Params) -> float:
     ----- returns -----\n
     :return loss_batch: average loss over batch
     """
-    samples = jnp.arange(setup.batch_size)
-    return jnp.mean(vmap(functools.partial(_get_loss_sample,params),in_axes=(0,))(samples))
+    loss_batch = 0
+    for sample in jnp.arange(setup.batch_size):
+        loss_batch += functools.partial(_get_loss_sample,params)(sample)/setup.batch_size
+    return loss_batch
 
 def _evaluate_sample(params: hk.Params, *args) -> jnp.ndarray:
     """
@@ -206,7 +219,7 @@ def _evaluate_sample(params: hk.Params, *args) -> jnp.ndarray:
     :param args: allows for mapping input for vmap api
 
     ----- returns -----\n
-    :return sample_err: mean squared error for the sample
+    :return err_sample: mean squared error for the sample
     """
     # load fine simulation
     fine_sim = dat.data.next_sim()
@@ -243,12 +256,12 @@ def _evaluate_sample(params: hk.Params, *args) -> jnp.ndarray:
     # get error
     path = sim_manager.output_writer.save_path_domain
     _, _, _, data_dict_mcT = load_data(path, quantities)
-    sample_err = _mse(data_dict_mcT['density'][:,:,0,0] - data_dict_coarse['density'][:,:,0,0])
+    err_sample = mse(data_dict_mcT['density'][:,:,0,0], data_dict_coarse['density'][:,:,0,0])
 
     # clean
-    os.system('rm -rf {}/*'.format(results_path))
+    os.system('rm -rf {}/*'.format(test_path))
 
-    return sample_err
+    return err_sample
 
 def evaluate_epoch(params: hk.Params) -> float:
     """
@@ -258,10 +271,12 @@ def evaluate_epoch(params: hk.Params) -> float:
     :param state: holds parameters of the NN
 
     ----- returns -----\n
-    :return epoch_err: mean squared error for the epoch
+    :return err_epoch: mean squared error for the epoch
     """
-    samples = jnp.arange(setup.num_test)
-    return jnp.mean(vmap(functools.partial(_evaluate_sample, params), in_axes=(0,))(samples))
+    err_epoch = 0
+    for sample in jnp.arange(setup.num_test):
+        err_epoch += functools.partial(_evaluate_sample, params)(sample)/setup.num_test
+    return 
 
 def Train(state: TrainingState) -> Tuple[TrainingState,TrainingState]:
     """
@@ -285,7 +300,7 @@ def Train(state: TrainingState) -> Tuple[TrainingState,TrainingState]:
         t1 = time.time()
         for batch in range(setup.num_batches):
            # get loss and grads
-            loss_batch, grads = value_and_grad(get_loss_batch,allow_int=True)(state.params)
+            loss_batch, grads = value_and_grad(get_loss_batch)(state.params)
 
             # update mcTangent
             updates, opt_state_new = optimizer.update(grads, state.opt_state)
@@ -303,7 +318,7 @@ def Train(state: TrainingState) -> Tuple[TrainingState,TrainingState]:
             epoch_min = epoch
             best_state = state
 
-        if epoch % 10 == 0:  # Print every 10 epochs
+        if epoch % 1000 == 0:  # Print every 1000 epochs
             print("time {:.2e}s loss {:.2e} TE {:.2e}  TE_min {:.2e} EPmin {:d} EP {} ".format(
                     t2 - t1, state.loss, test_err, min_err, epoch_min, epoch))
         
@@ -319,7 +334,7 @@ optimizer = optax.adam(setup.learning_rate)
 if os.path.exists(os.path.join(param_path,'last.pkl')):
     initial_params = load_params(os.path.join(param_path,'last.pkl'))
 else:
-    initial_params = mcT_net.init(jrand.PRNGKey(0), data_init)
+    initial_params = mcT_net.init(jrand.PRNGKey(1), data_init)
 initial_opt_state = optimizer.init(initial_params)
 
 state = TrainingState(initial_params, initial_opt_state, 0)

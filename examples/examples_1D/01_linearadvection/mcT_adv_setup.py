@@ -32,14 +32,14 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 case_name = 'mcT_adv'
 
 # data only
-mc_flag = False
-noise_flag = False
+mc_flag = True
+noise_flag = True
 
 c = 0.9
 u = 1.0
 
 t_max = 2.0
-nt = 100
+nt = 200
 dt = t_max/nt
 
 x_max = 2.0
@@ -48,18 +48,18 @@ nx = np.ceil(x_max/dx)
 dx = x_max/float(nx)
 nx = int(nx)
 
-mc_alpha = 1e6 if mc_flag else 0
+mc_alpha = 1e5 if mc_flag else 0
 noise_level = 0.02 if noise_flag else 0
 
-num_epochs = int(100)
-learning_rate = 1e-4
-batch_size = 4
+num_epochs = int(1e4)
+learning_rate = 1e-3
+batch_size = 5
 ns = 1
 layers = 1
 
 # sample set size
-num_train = 10
-num_test = 10
+num_train = 50
+num_test = 50
 num_batches = int(np.ceil(num_train/batch_size))
 
 
@@ -100,7 +100,7 @@ def get_cases() -> Cases:
     case_list = []
     for seed in seeds_to_gen:
         case_new = case_base
-        coefs = pos_coefs(seed,2)
+        coefs = pos_coefs(seed,5)
         rho0 = "lambda x: 1+"+\
             "((x>=0.2) & (x<=0.4)) * ( {0}*(np.exp(-334.477 * (x-0.3-0.005)**2) + np.exp(-334.477 * (x - 0.3 + 0.005)**2) + 4 * np.exp(-334.477 * (x - 0.3)**2))) + "+\
             "((x>=0.6) & (x<=0.8)) * {1} + "+\
@@ -116,7 +116,7 @@ def get_cases() -> Cases:
 cases = get_cases()
 
 # uploading wandb
-wandb.init(project="mcTangent")
+wandb.init(project="mcT-JAXFLUIDS",name=case_name)
 wandb.config.problem = case_name
 wandb.config.mc_alpha = mc_alpha
 wandb.config.learning_rate = learning_rate
