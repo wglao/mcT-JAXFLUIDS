@@ -4,6 +4,8 @@ data/
 next_run.json
 results
 results/
+network/
+test/
 */jaxfluids.egg-info
 tensorboard/
 *.dat

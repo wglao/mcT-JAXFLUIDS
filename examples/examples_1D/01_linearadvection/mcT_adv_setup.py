@@ -28,7 +28,7 @@ class Cases():
     def size(self):
         return len(self.cases)
 
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "true"
 case_name = 'mcT_adv'
 
 # data only

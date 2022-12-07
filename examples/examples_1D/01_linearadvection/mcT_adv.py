@@ -41,7 +41,6 @@ results_path = setup.work('results')
 test_path = setup.work('test')
 param_path = setup.work("network/parameters")
 
-
 # %% create mcTangent network and training functions
 class TrainingState(NamedTuple):
     params: hk.Params
@@ -160,12 +159,7 @@ def _get_loss_sample(params: hk.Params, sample) -> float:
     ml_true = jnp.swapaxes(ml_true,1,0)
     ml_true_arr = jnp.array([ml_true[jnp.s_[seq:seq+setup.ns+1,...]] for seq in range(setup.nt-setup.ns)])
     # [ml_true_arr] = [nt-ns seq, primes, ns+1 times, nx cells]
-    ml_loss_arr = vmap(mse,in_axes=(0,0))(
-        # [map over seq, all vars, from time 1 to end of seq, all cells]
-        ml_pred_arr[jnp.s_[:,1:,...]],
-        ml_true_arr
-    )
-    ml_loss_sample = jnp.mean(ml_loss_arr)
+    ml_loss_sample = mse(ml_pred_arr[jnp.s_[:,1:,...]],ml_true_arr)
 
     # feed forward with numerical solver
     mc_loss_sample = 0
@@ -185,12 +179,7 @@ def _get_loss_sample(params: hk.Params, sample) -> float:
         
         # mc loss
         ml_pred_reshape = jnp.concatenate(ml_pred_arr[jnp.s_[:,1:,...]])
-        print(ml_pred_reshape-mc_pred_arr[jnp.s_[:,-1,...]])
-        mc_loss_arr = vmap(mse,in_axes=(0,0))(
-            ml_pred_reshape,
-            mc_pred_arr[jnp.s_[:,-1,...]]
-        )
-        mc_loss_sample = setup.mc_alpha*jnp.mean(mc_loss_arr)
+        mc_loss_sample = setup.mc_alpha * mse(ml_pred_reshape,mc_pred_arr[jnp.s_[:,-1,...]])
     loss_sample = ml_loss_sample + mc_loss_sample
     return loss_sample
 
