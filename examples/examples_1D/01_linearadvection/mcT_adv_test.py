@@ -35,6 +35,43 @@ initial_opt_state = optimizer.init(initial_params)
 state = TrainingState(initial_params, initial_opt_state, 0)
 print('\n','-'*10,'Init Complete','-'*10,'\n')
 
+# %% Data Load
+t1 = time.time()
+test = dat.data._load(dat.data.next_sim())
+t2 = time.time()
+dat.data.check_sims()
+
+try:
+    jnp.reshape(test,(5,setup.nt+1,setup.nx_fine,setup.ny_fine,setup.nz_fine))
+except:
+    raise "Data is of incorrect shape. Loaded array with shape %s" %(test.shape)
+
+print('Data loaded, with shape: {}'.format(test.shape))
+print('Load time: %s s' %(t2-t1))
+
+print('\n','-'*10,'Single Sample Load Pass','-'*10,'\n')
+
+t1 = time.time()
+test, train = dat.data.load_all()
+t2 = time.time()
+dat.data.check_sims() 
+print('\n')
+
+try:
+    jnp.reshape(test,(setup.num_test, 5,setup.nt+1,setup.nx_fine,setup.ny_fine,setup.nz_fine))
+except:
+    raise "\nTest data is of incorrect shape. Loaded array with shape %s" %(test.shape)
+try:
+    jnp.reshape(train,(setup.num_train, 5,setup.nt+1,setup.nx_fine,setup.ny_fine,setup.nz_fine))
+except:
+    raise "\nTrain data is of incorrect shape. Loaded array with shape %s" %(train.shape)
+
+print('\nData loaded, with shapes: \n{0}, \n{1}'.format(*[test.shape, train.shape]))
+print('Load time: %s s' %(t2-t1))
+
+del test, train
+print('\n','-'*10,'Load All Pass','-'*10,'\n')
+
 # %% save and load params
 
 t1 = time.time()
@@ -195,6 +232,7 @@ else:
     params_new, opt_state_new, loss_new = update(initial_params,initial_opt_state,data_seq)
     t2 = time.time()
 
+    print("Types of updated state:")
     print(type(params_new),type(opt_state_new),type(loss_new))
 
     if type(params_new) != dict:

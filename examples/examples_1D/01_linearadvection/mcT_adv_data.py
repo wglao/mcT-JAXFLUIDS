@@ -23,6 +23,7 @@ class Sim(NamedTuple):
         if dtype == 'ARRAY':
             out = (out[0], out[1], out[2], np.array([out[3][quant] for quant in out[3].keys()]))
             return out
+
 class Data():
     """
     Manages data for training and testing
@@ -78,7 +79,7 @@ class Data():
                 sim_manager.simulate(buffer_dictionary)
     
     def _load(self, sim: Sim):
-        out = jnp.empty((5,setup.nt+1,setup.nx))
+        out = jnp.zeros((5,setup.nt+1,setup.nx_fine,setup.ny_fine,setup.nz_fine))
         quantities = ['density','velocityX','velocityY','velocityZ','pressure']
         _,_,_, data_dict = load_data(sim.domain,quantities)
         for ii, quant in enumerate(quantities):
@@ -86,11 +87,11 @@ class Data():
         return out
 
     def load_all(self):
-        data_test = jnp.zeros((setup.num_test,5,setup.nt+1,setup.nx))
+        data_test = jnp.zeros((setup.num_test,5,setup.nt+1,setup.nx_fine,setup.ny_fine,setup.nz_fine))
         for ii in range(setup.num_test):
             data_test = data_test.at[ii,...].set(self._load(self.next_sim()))
 
-        data_train = jnp.zeros((setup.num_train,5,setup.nt+1,setup.nx))
+        data_train = jnp.zeros((setup.num_train,5,setup.nt+1,setup.nx_fine,setup.ny_fine,setup.nz_fine))
         for ii in range(setup.num_train):
             data_train = data_train.at[ii,...].set(self._load(self.next_sim()))
 

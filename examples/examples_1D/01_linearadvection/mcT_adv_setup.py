@@ -47,7 +47,13 @@ x_max = 2.0
 dx = u*dt/c
 nx = np.ceil(x_max/dx)
 dx = x_max/float(nx)
+
 nx = int(nx)
+ny = 1
+nz = 1
+nx_fine = 4*nx
+ny_fine = ny
+nz_fine = nz
 
 mc_alpha = 1e5 if mc_flag else 0
 noise_level = 0.02 if noise_flag else 0
