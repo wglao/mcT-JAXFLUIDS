@@ -60,7 +60,7 @@ def mcT_fn(state: jnp.ndarray) -> jnp.ndarray:
     flux = mcT(state)
     return flux
 
-def save_params(params: hk.Params, path: str, filename: Optional[str]) -> None:
+def save_params(params: hk.Params, path: str, filename: Optional[str] = None) -> None:
     params = jax.device_get(params)
     if filename:
         path = os.path.join(path,filename)
@@ -69,7 +69,7 @@ def save_params(params: hk.Params, path: str, filename: Optional[str]) -> None:
         pickle.dump(params, fp)
         fp.close()
 
-def load_params(path: str, filename: Optional[str]):
+def load_params(path: str, filename: Optional[str] = None):
     if filename:
         path = os.path.join(path,filename)
     assert os.path.exists(path), "Specified parameter file does not exist"
@@ -126,7 +126,7 @@ def get_coarse(data_fine, seed: Optional[int] = 1) -> jnp.ndarray:
             seed_arr = jrand.randint(jrand.PRNGKey(seed),(setup.nt+1,),1,setup.nt+1)
             data_coarse = data_coarse.at[ii,...].set(vmap(add_noise,in_axes=(0,0))(data_coarse[ii,...],seed_arr))
     
-    return np.array(data_coarse)
+    return data_coarse
 
 
 def _get_loss_sample(params: hk.Params, sample:jnp.ndarray) -> float:
@@ -357,6 +357,7 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
         # reset each epoch
         state = TrainingState(state.params,state.opt_state,0)
         train_coarse = vmap(get_coarse, in_axes=(0,None))(data_train,epoch)
+        test_coarse = vmap(get_coarse, in_axes=(0,None))(data_test,epoch)
 
         # sequence data
         train_seq = np.array([train_coarse[:,:, ii:(ii+setup.ns+1), ...] for ii in range(setup.nt-setup.ns-1)])
@@ -382,7 +383,7 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
                 state = TrainingState(params_new,opt_state_new,loss_new)
 
         # call test function
-        test_err = evaluate_epoch(state.params)
+        test_err = evaluate_epoch(state.params, test_coarse)
         t2 = time.time()
 
         # save in case job is canceled, can resume
@@ -406,9 +407,9 @@ optimizer = optax.adam(setup.learning_rate)
 
 if __name__ == "__main__":
     # data input will be mean(primes_L[0], primes_R[0]) -> [(nx+1),1,1]
-    data_init = jnp.empty((setup.nx+1,1))
+    data_init = jnp.empty((setup.nx+1,1,1))
     if os.path.exists(os.path.join(param_path,'last.pkl')):
-        initial_params = load_params(os.path.join(param_path,'last.pkl'))
+        initial_params = load_params(param_path,'last.pkl')
     else:
         initial_params = net.init(jrand.PRNGKey(1), data_init)
     initial_opt_state = optimizer.init(initial_params)

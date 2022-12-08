@@ -79,21 +79,21 @@ class Data():
                 sim_manager.simulate(buffer_dictionary)
     
     def _load(self, sim: Sim):
-        out = jnp.zeros((5,setup.nt+1,setup.nx_fine,setup.ny_fine,setup.nz_fine))
+        out = np.zeros((5,setup.nt+1,setup.nx_fine,setup.ny_fine,setup.nz_fine))
         quantities = ['density','velocityX','velocityY','velocityZ','pressure']
         _,_,_, data_dict = load_data(sim.domain,quantities)
         for ii, quant in enumerate(quantities):
-            out = out.at[ii,...].set(data_dict[quant])
+            out[ii,...] = data_dict[quant]
         return out
 
     def load_all(self):
-        data_test = jnp.zeros((setup.num_test,5,setup.nt+1,setup.nx_fine,setup.ny_fine,setup.nz_fine))
+        data_test = np.zeros((setup.num_test,5,setup.nt+1,setup.nx_fine,setup.ny_fine,setup.nz_fine))
         for ii in range(setup.num_test):
-            data_test = data_test.at[ii,...].set(self._load(self.next_sim()))
+            data_test[ii,...] = self._load(self.next_sim())
 
-        data_train = jnp.zeros((setup.num_train,5,setup.nt+1,setup.nx_fine,setup.ny_fine,setup.nz_fine))
+        data_train = np.zeros((setup.num_train,5,setup.nt+1,setup.nx_fine,setup.ny_fine,setup.nz_fine))
         for ii in range(setup.num_train):
-            data_train = data_train.at[ii,...].set(self._load(self.next_sim()))
+            data_train[ii,...] = self._load(self.next_sim())
 
         self.check_sims()
         return data_test, data_train
