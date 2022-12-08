@@ -8,6 +8,11 @@ import jax.numpy as jnp
 """parameters for initializing mcTangent"""
 work = functools.partial(os.path.join,'./')
 save_path = work('data')
+parallel_flag = False
+
+# data only
+mc_flag = True
+noise_flag = True
 
 class Cases():
     """
@@ -30,10 +35,6 @@ class Cases():
 
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "true"
 case_name = 'mcT_adv'
-
-# data only
-mc_flag = True
-noise_flag = True
 
 c = 0.9
 u = 1.0

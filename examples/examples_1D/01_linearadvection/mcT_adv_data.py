@@ -1,4 +1,4 @@
-from typing import Tuple, NamedTuple
+from typing import Tuple, NamedTuple, Iterable
 import shutil, os, json, re
 import matplotlib.pyplot as plt
 import jax
@@ -6,6 +6,7 @@ from jax import vmap, pmap, lax
 from jaxfluids import InputReader, Initializer, SimulationManager
 from jaxfluids.post_process import load_data, create_lineplot
 import jax.numpy as jnp
+import numpy as np
 
 import mcT_adv_setup as setup
 
@@ -15,6 +16,13 @@ class Sim(NamedTuple):
     case: dict
     numerical: dict
 
+    def load(self, quantities: Iterable[str] = ['density','velocityX','velocityY','velocityZ','pressure'], dtype: str = 'ARRAY'):
+        out = load_data(self.domain,quantities)
+        if dtype == 'DICT':
+            return out
+        if dtype == 'ARRAY':
+            out = (out[0], out[1], out[2], np.array([out[3][quant] for quant in out[3].keys()]))
+            return out
 class Data():
     """
     Manages data for training and testing
@@ -68,6 +76,27 @@ class Data():
 
                 buffer_dictionary = initializer.initialization()
                 sim_manager.simulate(buffer_dictionary)
+    
+    def _load(self, sim: Sim):
+        out = jnp.empty((5,setup.nt+1,setup.nx))
+        quantities = ['density','velocityX','velocityY','velocityZ','pressure']
+        _,_,_, data_dict = load_data(sim.domain,quantities)
+        for ii, quant in enumerate(quantities):
+            out = out.at[ii,...].set(data_dict[quant])
+        return out
+
+    def load_all(self):
+        data_test = jnp.zeros((setup.num_test,5,setup.nt+1,setup.nx))
+        for ii in range(setup.num_test):
+            data_test = data_test.at[ii,...].set(self._load(self.next_sim()))
+
+        data_train = jnp.zeros((setup.num_train,5,setup.nt+1,setup.nx))
+        for ii in range(setup.num_train):
+            data_train = data_train.at[ii,...].set(self._load(self.next_sim()))
+
+        self.check_sims()
+        return data_test, data_train
+
             
 
 data = Data(setup.save_path)

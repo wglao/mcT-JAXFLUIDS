@@ -1,4 +1,4 @@
-from typing import Tuple, NamedTuple, Optional
+from typing import Tuple, NamedTuple, Optional, Iterable
 import time, os, wandb
 import shutil, functools
 import numpy as np
@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 
 import mcT_adv_setup as setup
 import mcT_adv_data as dat
+from mcT_adv_data import Sim
 
 """
 Train mcTangent to solve linear advection using JAX-Fluids
@@ -50,26 +51,28 @@ class TrainingState(NamedTuple):
 # dense network, layer count variable not yet implemented
 def mcT_fn(state: jnp.ndarray) -> jnp.ndarray:
     """Dense network with 1 layer of ReLU units"""
-    n_fields = state.shape[0]
-    n_faces = state.shape[1]
+    n_faces = setup.nx + 1
     mcT = hk.Sequential([
         hk.Flatten(),
-        hk.Linear(5*n_faces*n_fields), jax.nn.relu,
-        hk.Linear(n_faces)
+        hk.Linear(n_faces), jax.nn.relu,
+        hk.Linear(1)
     ])
     flux = mcT(state)
-    flux = jnp.reshape(flux,(n_fields,n_faces,1,1))
     return flux
 
-def save_params(params, path) -> None:
+def save_params(params: hk.Params, path: str, filename: Optional[str]) -> None:
     params = jax.device_get(params)
+    if filename:
+        path = os.path.join(path,filename)
     os.makedirs(os.path.dirname(path),exist_ok=True)
     with open(path, 'wb') as fp:
         pickle.dump(params, fp)
         fp.close()
 
-def load_params(path):
-    assert os.path.exists(path), "Specified parameter save path does not exist"
+def load_params(path: str, filename: Optional[str]):
+    if filename:
+        path = os.path.join(path,filename)
+    assert os.path.exists(path), "Specified parameter file does not exist"
     with open(path, 'rb') as fp:
         params = pickle.load(fp)
         fp.close()
@@ -105,124 +108,139 @@ def _add_noise(arr: jnp.ndarray, seed: int, noise_level: float):
 def add_noise(arr: jnp.ndarray, seed: int):
     return functools.partial(_add_noise,noise_level=setup.noise_level)(arr,seed)
 
-def _get_loss_sample(params: hk.Params, sample) -> float:
+def get_coarse(data_fine, seed: Optional[int] = 1) -> jnp.ndarray:
+    """
+    down samples the data by factor of 4 for use in training.
+
+    ----- inputs -----\n
+    :param data_fine: data to be downsampled
+
+    ----- returns -----\n
+    :return data_coarse: downsampled data array
+    """
+    data_coarse = jnp.zeros((5,setup.nt+1,setup.nx,1,1))
+
+    for ii, prime in enumerate(data_fine):
+        data_coarse = data_coarse.at[ii,...].set(jim.resize(prime,(setup.nt+1,setup.nx,1,1),"linear"))
+        if setup.noise_flag:
+            seed_arr = jrand.randint(jrand.PRNGKey(seed),(setup.nt+1,),1,setup.nt+1)
+            data_coarse = data_coarse.at[ii,...].set(vmap(add_noise,in_axes=(0,0))(data_coarse[ii,...],seed_arr))
+    
+    return np.array(data_coarse)
+
+
+def _get_loss_sample(params: hk.Params, sample:jnp.ndarray) -> float:
     """
     Uses a highly resolved simulation as ground truth to calculate loss over a sample
     
     ----- inputs -----\n
     :param params: holds parameters of the NN
-    :param sample: allows for mapping input for vmap api, used as the seed number if noise flag is True
+    :param sample: training data for one sample, of shape [primes, sequences, timesteps, xs(, ys, zs)]
 
     ----- returns -----\n
     :return loss_sample: average loss over all sequences in the sample
     """
-    # load fine simulation
-    fine_sim = dat.data.next_sim()
-    quantities = ['density','velocityX','velocityY','velocityZ','pressure']
-    _, _, _, data_dict_fine = load_data(fine_sim.domain, quantities)
-    # coarse sampling
-    data_dict_coarse = {}
-    for quant in quantities:
-        data_fine = data_dict_fine[quant]
-        data_dict_coarse[quant] = jim.resize(data_fine,(setup.nt+1,setup.nx,1,1),"linear")
-        if setup.noise_flag:
-            seed_arr = jrand.randint(jrand.PRNGKey(sample),(setup.nt+1,),1,setup.nt+1)
-            data_dict_coarse[quant] = vmap(add_noise,in_axes=(0,0))(data_dict_coarse[quant],seed_arr)
-
+    sim = dat.data.next_sim()
     # feed forward with mcTangent ns+1 steps
-    coarse_case = fine_sim.case
-    coarse_num = fine_sim.numerical
+    coarse_case = sim.case
+    coarse_num = sim.numerical
     coarse_case['domain']['x']['cells'] = setup.nx
     coarse_num['conservatives']['time_integration']['fixed_timestep'] = setup.dt
     coarse_num['conservatives']['convective_fluxes']['riemann_solver'] = "MCTANGENT"
 
     ml_parameters_dict = {"riemann_solver":params}
-    ml_networks_dict = hk.data_structures.to_immutable_dict({"riemann_solver": mcT_net})
+    ml_networks_dict = hk.data_structures.to_immutable_dict({"riemann_solver": net})
 
     input_reader = InputReader(coarse_case,coarse_num)
     sim_manager = SimulationManager(input_reader)
 
-    ml_primes_init = jnp.array([data_dict_coarse[key] for key in data_dict_coarse.keys()])[jnp.s_[:,:setup.nt-setup.ns,...]]
-    
     # switch 0th axis to time for feed forward mapping
-    ml_primes_init = jnp.swapaxes(ml_primes_init,1,0)
+    # sample = jnp.swapaxes(sample,1,0)
+    ml_primes_init = sample[:,:,0,...]
+    
 
-    feed_forward = functools.partial(sim_manager.feed_forward,ml_parameters_dict=ml_parameters_dict,ml_networks_dict=ml_networks_dict)
-    ml_pred_arr, _ = feed_forward(
+    # # use partial to avoid jax type error
+    # feed_forward = functools.partial(sim_manager.feed_forward,
+    #     n_steps=setup.ns+1,
+    #     timestep_size=coarse_case['general']['save_dt'],
+    #     t_start=0,
+    #     ml_parameters_dict=ml_parameters_dict,
+    #     ml_networks_dict=ml_networks_dict)
+    
+    # ml_pred_arr, _ = feed_forward(
+    #     ml_primes_init,
+    #     jnp.empty_like(ml_primes_init) # not needed for single-phase, but is a required arg for feed_forward
+    # )
+
+    ml_pred_arr, _ = sim_manager.feed_forward(
         ml_primes_init,
         jnp.empty_like(ml_primes_init), # not needed for single-phase, but is a required arg for feed_forward
-        setup.ns+1, coarse_case['general']['save_dt'], 0
+        setup.ns+1,
+        coarse_case['general']['save_dt'],
+        0, 1,
+        ml_parameters_dict,
+        ml_networks_dict
     )
+    ml_pred_arr = jnp.swapaxes(ml_pred_arr,1,2)
 
     # ml loss
-    ml_true = jnp.array([data_dict_coarse[key] for key in data_dict_coarse.keys()])[jnp.s_[:,1:,:]]
-    ml_true = jnp.swapaxes(ml_true,1,0)
-    ml_true_arr = jnp.array([ml_true[jnp.s_[seq:seq+setup.ns+1,...]] for seq in range(setup.nt-setup.ns)])
-    # [ml_true_arr] = [nt-ns seq, primes, ns+1 times, nx cells]
-    ml_loss_sample = mse(ml_pred_arr[jnp.s_[:,1:,...]],ml_true_arr)
+    ml_loss_sample = mse(ml_pred_arr[:,:,1:,...], sample[:,:,1:,...])
 
-    # feed forward with numerical solver
-    mc_loss_sample = 0
-    if setup.mc_flag:
-        coarse_num['conservatives']['convective_fluxes']['riemann_solver'] = "HLLC"
-        input_reader = InputReader(coarse_case,coarse_num)
-        sim_manager = SimulationManager(input_reader)
-        
-        #  map over times, concatenate all sequences
-        mc_primes_init = jnp.concatenate(ml_pred_arr[jnp.s_[:,:-1,...]])
+    if not setup.mc_flag:
+        return ml_loss_sample
+    
+    # mc loss
+    coarse_num['conservatives']['convective_fluxes']['riemann_solver'] = "HLLC"
+    input_reader = InputReader(coarse_case,coarse_num)
+    sim_manager = SimulationManager(input_reader)
+    
+    #  map over times, concatenate all sequences
+    mc_primes_init = jnp.concatenate(jnp.swapaxes(ml_pred_arr[:,:,:-1,...],1,2))
 
-        mc_pred_arr, _ = sim_manager.feed_forward(
-            mc_primes_init,
-            jnp.empty_like(mc_primes_init), # not needed for single-phase, but is a required arg
-            1, coarse_case['general']['save_dt'], 0
-        )
-        
-        # mc loss
-        ml_pred_reshape = jnp.concatenate(ml_pred_arr[jnp.s_[:,1:,...]])
-        mc_loss_sample = setup.mc_alpha * mse(ml_pred_reshape,mc_pred_arr[jnp.s_[:,-1,...]])
+    mc_pred_arr, _ = sim_manager.feed_forward(
+        mc_primes_init,
+        jnp.empty_like(mc_primes_init), # not needed for single-phase, but is a required arg
+        1, coarse_case['general']['save_dt'], 0
+    )
+    mc_pred_arr = jnp.nan_to_num(mc_pred_arr)
+
+    ml_pred_mcloss = jnp.concatenate(jnp.swapaxes(ml_pred_arr[:,:,1:,...],1,2))
+    mc_loss_sample = setup.mc_alpha * mse(ml_pred_mcloss,mc_pred_arr[jnp.s_[:,-1,...]])
     loss_sample = ml_loss_sample + mc_loss_sample
     return loss_sample
 
-def get_loss_batch(params: hk.Params) -> float:
+def get_loss_batch(params: hk.Params, data: jnp.ndarray) -> float:
     """
     vectorized version of _get_loss_sample
 
     ----- inputs -----\n
     :param params: holds parameters of the NN
+    :param data: sequenced training data, of shape [samples, primes, sequences, timesteps, xs]
 
     ----- returns -----\n
     :return loss_batch: average loss over batch
     """
     loss_batch = 0
-    for sample in jnp.arange(setup.batch_size):
-        loss_batch += functools.partial(_get_loss_sample,params)(sample)/setup.batch_size
+    for sample in data:
+        loss_batch += _get_loss_sample(params,sample)/data.shape[0]
     return loss_batch
 
-def _evaluate_sample(params: hk.Params, *args) -> jnp.ndarray:
+def _evaluate_sample(params: hk.Params, sample: jnp.ndarray) -> jnp.ndarray:
     """
     creates a simulation manager to fully simulate the case using the updated mcTangent
     the resulting data is then loaded and used to calculate the mse across all test data
 
     ----- inputs -----\n
     :param params: holds parameters of the NN
-    :param args: allows for mapping input for vmap api
+    :param sample: allows for mapping input for vmap api, also used as the seed number if noise flag is True
 
     ----- returns -----\n
     :return err_sample: mean squared error for the sample
     """
-    # load fine simulation
-    fine_sim = dat.data.next_sim()
-    quantities = ['density']
-    _, _, _, data_dict_fine = load_data(fine_sim.domain, quantities)
-    # coarse sampling
-    data_dict_coarse = {}
-    for quant in quantities:
-        data_fine = data_dict_fine[quant]
-        data_dict_coarse[quant] = jim.resize(data_fine,(setup.nt+1,setup.nx,1,1),"linear")
-
-    # run mcTangent simulation
-    coarse_case = fine_sim.case
-    coarse_num = fine_sim.numerical
+    sim = dat.data.next_sim()
+    # feed forward with mcTangent ns+1 steps
+    coarse_case = sim.case
+    coarse_num = sim.numerical
     coarse_case['general']['case_name'] = 'test_mcT'
     coarse_case['general']['save_path'] = test_path
     coarse_case['domain']['x']['cells'] = setup.nx
@@ -230,7 +248,7 @@ def _evaluate_sample(params: hk.Params, *args) -> jnp.ndarray:
     coarse_num['conservatives']['convective_fluxes']['riemann_solver'] = "MCTANGENT"
 
     ml_parameters_dict = {"riemann_solver": params}
-    ml_networks_dict = hk.data_structures.to_immutable_dict({"riemann_solver": mcT_net})
+    ml_networks_dict = hk.data_structures.to_immutable_dict({"riemann_solver": net})
 
     input_reader = InputReader(coarse_case,coarse_num)
     initializer = Initializer(input_reader)
@@ -244,38 +262,90 @@ def _evaluate_sample(params: hk.Params, *args) -> jnp.ndarray:
 
     # get error
     path = sim_manager.output_writer.save_path_domain
+    quantities = ['density','velocityX','velocityY','velocityZ','pressure']
     _, _, _, data_dict_mcT = load_data(path, quantities)
-    err_sample = mse(data_dict_mcT['density'][:,:,0,0], data_dict_coarse['density'][:,:,0,0])
+    mcT_pred = jnp.array([data_dict_mcT[quant] for quant in data_dict_mcT.keys()])
+    err_sample = mse(mcT_pred, sample)
 
     # clean
     os.system('rm -rf {}/*'.format(test_path))
 
     return err_sample
 
-def evaluate_epoch(params: hk.Params) -> float:
+def evaluate_epoch(params: hk.Params, data: jnp.ndarray) -> float:
     """
-    vectorized form of _evaluate_sample
+    looped form of _evaluate_sample
 
     ----- inputs -----\n
     :param state: holds parameters of the NN
+    :param data: downsampled testing data, of shape [samples, primes, sequences, timesteps, xs]
+
 
     ----- returns -----\n
     :return err_epoch: mean squared error for the epoch
     """
     err_epoch = 0
-    for sample in jnp.arange(setup.num_test):
-        err_epoch += functools.partial(_evaluate_sample, params)(sample)/setup.num_test
-    return 
+    for sample in data:
+        err_epoch += _evaluate_sample(params,sample)/setup.num_test
+    return err_epoch
 
-def Train(state: TrainingState) -> Tuple[TrainingState,TrainingState]:
+if setup.parallel_flag:
+    @functools.partial(pmap, axis_name='data')
+    def update(params: hk.Params, opt_state: optax.OptState, data: jnp.ndarray) -> Tuple:
+        """
+        Evaluates network loss and gradients
+        Applies optimizer updates and returns the new parameters, state, and loss
+
+        ----- inputs -----\n
+        :param params: current network params
+        :param opt_state: current optimizer state
+        :param data: array of sequenced training data, of shape [samples, primes, sequences, timesteps, xs]
+
+        ----- returns -----\n
+        :return state: tuple of arrays containing updated params, optimizer state, as loss
+        """
+
+        loss_batch, grads_batch = value_and_grad(get_loss_batch, argnums=0, allow_int=True)(params, data)
+
+        grads = lax.pmean(grads_batch, axis_name='data')
+        loss = lax.pmean(loss_batch, axis_name='data')
+
+        updates, opt_state_new = optimizer.update(grads, opt_state)
+        params_new = optax.apply_updates(params, updates)
+        # params_new = jax.tree_map(lambda p, g: optax.apply_updates(p,g), params, updates)
+
+        return params_new, opt_state_new, loss
+else:
+    def update(params: hk.Params, opt_state: optax.OptState, data: jnp.ndarray) -> Tuple:
+        """
+        Evaluates network loss and gradients
+        Applies optimizer updates and returns the new parameters, state, and loss
+
+        ----- inputs -----\n
+        :param params: current network params
+        :param opt_state: current optimizer state
+        :param data: array of sequenced training data, of shape [samples, primes, sequences, timesteps, xs]
+
+        ----- returns -----\n
+        :return state: tuple of arrays containing updated params, optimizer state, as loss
+        """
+
+        loss, grads = value_and_grad(get_loss_batch, argnums=0, allow_int=True)(params, data)
+
+        updates, opt_state_new = optimizer.update(grads, opt_state)
+        params_new = optax.apply_updates(params, updates)
+
+        return params_new, opt_state_new, loss
+
+def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -> Tuple[TrainingState,TrainingState]:
     """
     Train mcTangent through end-to-end optimization in JAX-Fluids
 
     ----- inputs -----\n
     :param state: holds parameters of the NN and optimizer
     :param setup: holds parameters for the operation of JAX-Fluids
-    :param train_coefs: define initial conditions in training
-    :param test_coefs: define initial conditions in testing
+    :param data_test: data for testing, vanilla numpy to keep data on CPU, of shape [samples, primes, times, xs]
+    :param data_train: data for training, vanilla numpy to keep data on CPU, of shape [samples, primes, times, xs]
 
     ----- returns -----\n
     :return states: tuple holding the best state by least error and the end state
@@ -284,23 +354,39 @@ def Train(state: TrainingState) -> Tuple[TrainingState,TrainingState]:
     epoch_min = 1
     best_state = state
     for epoch in range(setup.num_epochs):
-        # reset loss
+        # reset each epoch
         state = TrainingState(state.params,state.opt_state,0)
+        train_coarse = vmap(get_coarse, in_axes=(0,None))(data_train,epoch)
+
+        # sequence data
+        train_seq = np.array([train_coarse[:,:, ii:(ii+setup.ns+1), ...] for ii in range(setup.nt-setup.ns-1)])
+        del train_coarse
+
+        # batch data
+        train_batch = np.array_split(train_seq, setup.num_batches)
+        del train_seq
+
         t1 = time.time()
         for batch in range(setup.num_batches):
-           # get loss and grads
-            loss_batch, grads = value_and_grad(get_loss_batch)(state.params)
+            # call update function
+            if setup.parallel_flag:
+                n_dev = jax.local_device_count()
+                print('batching for %s devices' %n_dev)
+                train_par = np.array_split(train_batch[batch], n_dev)
+                params_par = jax.tree_map(lambda x: jnp.array([x] * n_dev), state.params)
+                opt_par = jax.tree_map(lambda x: jnp.array([x] * n_dev), state.opt_state)
+                params_new, opt_state_new, loss_new = update(params_par, opt_par, train_par)
+                state = TrainingState(params_new[0],opt_state_new[0],loss_new[0])
+            else:
+                params_new, opt_state_new, loss_new = update(state.params, state.opt_state, train_batch[batch])
+                state = TrainingState(params_new,opt_state_new,loss_new)
 
-            # update mcTangent
-            updates, opt_state_new = optimizer.update(grads, state.opt_state)
-            params_new = optax.apply_updates(state.params, updates)
-            state = TrainingState(params_new,opt_state_new,state.loss + loss_batch/setup.num_batches)
+        # call test function
+        test_err = evaluate_epoch(state.params)
         t2 = time.time()
-        
+
         # save in case job is canceled, can resume
         save_params(state.params,os.path.join(param_path,'last.pkl'))
-
-        test_err = evaluate_epoch(state.params)
         
         if test_err <= min_err:
             min_err = test_err
@@ -315,105 +401,108 @@ def Train(state: TrainingState) -> Tuple[TrainingState,TrainingState]:
         wandb.log({"Train loss": float(state.loss), "Test Error": float(test_err), 'TEST MIN': float(min_err), 'Epoch' : float(epoch)})
     return best_state, state
 
-# data input will be mean(primes_L, primes_R) -> [5,(nx+1),1,1]
-mcT_net = hk.without_apply_rng(hk.transform(mcT_fn))
-
-data_init = jnp.empty((5,setup.nx+1,1,1))
+net = hk.without_apply_rng(hk.transform(mcT_fn))
 optimizer = optax.adam(setup.learning_rate)
-if os.path.exists(os.path.join(param_path,'last.pkl')):
-    initial_params = load_params(os.path.join(param_path,'last.pkl'))
-else:
-    initial_params = mcT_net.init(jrand.PRNGKey(1), data_init)
-initial_opt_state = optimizer.init(initial_params)
 
-state = TrainingState(initial_params, initial_opt_state, 0)
+if __name__ == "__main__":
+    # data input will be mean(primes_L[0], primes_R[0]) -> [(nx+1),1,1]
+    data_init = jnp.empty((setup.nx+1,1))
+    if os.path.exists(os.path.join(param_path,'last.pkl')):
+        initial_params = load_params(os.path.join(param_path,'last.pkl'))
+    else:
+        initial_params = net.init(jrand.PRNGKey(1), data_init)
+    initial_opt_state = optimizer.init(initial_params)
 
-best_state, end_state = Train(state)
+    state = TrainingState(initial_params, initial_opt_state, 0)
 
-# save params
-save_params(best_state.params,os.path.join(param_path,"best.pkl"))
-save_params(end_state.params,os.path.join(param_path,"end.pkl"))
+    data_test, data_train = dat.data.load_all()
 
-# %% visualize best and end state
+    best_state, end_state = Train(state, data_test, data_train)
 
-# fine
-fine_sim = dat.data.next_sim()
+    # save params
+    save_params(best_state.params,os.path.join(param_path,"best.pkl"))
+    save_params(end_state.params,os.path.join(param_path,"end.pkl"))
 
-quantities = ['density']
-x_fine, _, times, data_dict_fine = load_data(fine_sim.domain, quantities)
+    # %% visualize best and end state
 
-# coarse
-coarse_case = fine_sim.case
-coarse_num = fine_sim.numerical
-coarse_case['general']['save_path'] = results_path
-coarse_case['domain']['x']['cells'] = setup.dx
-coarse_num['conservatives']['time_integration']['fixed_timestep'] = setup.dt
-input_reader = InputReader(coarse_case,coarse_num)
-initializer = Initializer(input_reader)
-sim_manager = SimulationManager(input_reader)
-buffer_dictionary = initializer.initialization()
-sim_manager.simulate(buffer_dictionary)
+    # fine
+    fine_sim = dat.data.next_sim()
 
-path = sim_manager.output_writer.save_path_domain
-quantities = ['density']
-x_coarse, _, _, data_dict_coarse = load_data(path, quantities)
+    quantities = ['density']
+    x_fine, _, times, data_dict_fine = load_data(fine_sim.domain, quantities)
 
-coarse_num['conservatives']['convective_fluxes']['riemann_solver'] = "MCTANGENT"
+    # coarse
+    coarse_case = fine_sim.case
+    coarse_num = fine_sim.numerical
+    coarse_case['general']['save_path'] = results_path
+    coarse_case['domain']['x']['cells'] = setup.dx
+    coarse_num['conservatives']['time_integration']['fixed_timestep'] = setup.dt
+    input_reader = InputReader(coarse_case,coarse_num)
+    initializer = Initializer(input_reader)
+    sim_manager = SimulationManager(input_reader)
+    buffer_dictionary = initializer.initialization()
+    sim_manager.simulate(buffer_dictionary)
 
-# best state
-params_best = load_params(os.path.join(param_path,"best.pkl"))
+    path = sim_manager.output_writer.save_path_domain
+    quantities = ['density']
+    x_coarse, _, _, data_dict_coarse = load_data(path, quantities)
 
-ml_parameters_dict = {"riemann_solver":params_best}
-ml_networks_dict = hk.data_structures.to_immutable_dict({"riemannsolver": mcT_net})
+    coarse_num['conservatives']['convective_fluxes']['riemann_solver'] = "MCTANGENT"
 
-input_reader = InputReader(coarse_case,coarse_num)
-initializer = Initializer(input_reader)
-sim_manager = SimulationManager(input_reader)
-buffer_dictionary = initializer.initialization()
-buffer_dictionary['machinelearning_modules'] = {
-    'ml_parameters_dict': ml_parameters_dict,
-    'ml_networks_dict': ml_networks_dict
-}
-sim_manager.simulate(buffer_dictionary)
+    # best state
+    params_best = load_params(os.path.join(param_path,"best.pkl"))
 
-path = sim_manager.output_writer.save_path_domain
-_, _, _, data_dict_best = load_data(path, quantities)
+    ml_parameters_dict = {"riemann_solver":params_best}
+    ml_networks_dict = hk.data_structures.to_immutable_dict({"riemannsolver": mcT_net})
 
-# end state
-params_end = load_params(os.path.join(param_path,"end.pkl"))
-ml_parameters_dict = {"riemann_solver":params_end}
-buffer_dictionary['machinelearning_modules']['ml_parameters_dict'] = ml_parameters_dict
-sim_manager.simulate(buffer_dictionary)
+    input_reader = InputReader(coarse_case,coarse_num)
+    initializer = Initializer(input_reader)
+    sim_manager = SimulationManager(input_reader)
+    buffer_dictionary = initializer.initialization()
+    buffer_dictionary['machinelearning_modules'] = {
+        'ml_parameters_dict': ml_parameters_dict,
+        'ml_networks_dict': ml_networks_dict
+    }
+    sim_manager.simulate(buffer_dictionary)
 
-path = sim_manager.output_writer.save_path_domain
-_, _, _, data_dict_end = load_data(path, quantities)
+    path = sim_manager.output_writer.save_path_domain
+    _, _, _, data_dict_best = load_data(path, quantities)
 
-data_true = data_dict_fine['density']
-data_coarse = data_dict_coarse['density']
-data_best = data_dict_best['density']
-data_end = data_dict_end['density']
+    # end state
+    params_end = load_params(os.path.join(param_path,"end.pkl"))
+    ml_parameters_dict = {"riemann_solver":params_end}
+    buffer_dictionary['machinelearning_modules']['ml_parameters_dict'] = ml_parameters_dict
+    sim_manager.simulate(buffer_dictionary)
 
-n_plot = 3
-plot_steps = np.linspace(0,setup.nt,n_plot,dtype=int)
-plot_times = times[plot_steps]
+    path = sim_manager.output_writer.save_path_domain
+    _, _, _, data_dict_end = load_data(path, quantities)
 
-fig = plt.figure(figsize=(32,10))
-for nn in range(n_plot):
-    ut = jnp.reshape(data_true[plot_steps[nn], :], (4*setup.nx, 1))
-    uc = jnp.reshape(data_coarse[plot_steps[nn], :], (setup.nx, 1))
-    ub = jnp.reshape(data_best[plot_steps[nn], :], (setup.nx, 1))
-    ue = jnp.reshape(data_end[plot_steps[nn], :], (setup.nx, 1))
-    ax = fig.add_subplot(1, n_plot, nn+1)
-    l1 = ax.plot(x_fine, ut, '-', linewidth=2, label='True')
-    l2 = ax.plot(x_coarse, uc, '--', linewidth=2, label='Coarse')
-    l2 = ax.plot(x_coarse, ub, '--', linewidth=2, label='Predicted')
-    l2 = ax.plot(x_coarse, ue, '--', linewidth=2, label='Predicted')
-    ax.set_aspect('auto', adjustable='box')
-    ax.set_title('t = ' + str(plot_times[nn]))
+    data_true = data_dict_fine['density']
+    data_coarse = data_dict_coarse['density']
+    data_best = data_dict_best['density']
+    data_end = data_dict_end['density']
 
-    if nn == 0:
-        handles, labels = ax.get_legend_handles_labels()
-        fig.legend(handles, labels, loc='upper center')
+    n_plot = 3
+    plot_steps = np.linspace(0,setup.nt,n_plot,dtype=int)
+    plot_times = times[plot_steps]
 
-# plt.show()
-fig.savefig(os.path.join('figs',setup.case_name+'.png'))
+    fig = plt.figure(figsize=(32,10))
+    for nn in range(n_plot):
+        ut = jnp.reshape(data_true[plot_steps[nn], :], (4*setup.nx, 1))
+        uc = jnp.reshape(data_coarse[plot_steps[nn], :], (setup.nx, 1))
+        ub = jnp.reshape(data_best[plot_steps[nn], :], (setup.nx, 1))
+        ue = jnp.reshape(data_end[plot_steps[nn], :], (setup.nx, 1))
+        ax = fig.add_subplot(1, n_plot, nn+1)
+        l1 = ax.plot(x_fine, ut, '-', linewidth=2, label='True')
+        l2 = ax.plot(x_coarse, uc, '--', linewidth=2, label='Coarse')
+        l2 = ax.plot(x_coarse, ub, '--', linewidth=2, label='Predicted')
+        l2 = ax.plot(x_coarse, ue, '--', linewidth=2, label='Predicted')
+        ax.set_aspect('auto', adjustable='box')
+        ax.set_title('t = ' + str(plot_times[nn]))
+
+        if nn == 0:
+            handles, labels = ax.get_legend_handles_labels()
+            fig.legend(handles, labels, loc='upper center')
+
+    # plt.show()
+    fig.savefig(os.path.join('figs',setup.case_name+'.png'))
