@@ -27,7 +27,7 @@ from mcT_adv import *
 cache_path = '.test_cache'
 rng = [jrand.PRNGKey(i) for i in range(10)]
 os.makedirs(cache_path,exist_ok=True)
-data_init = jnp.empty((setup.nx+1,1,1))
+data_init = jnp.empty((1,setup.nx+1,1,1))
 optimizer = optax.adam(setup.learning_rate)
 initial_params = net.init(rng.pop(), data_init)
 initial_opt_state = optimizer.init(initial_params)
