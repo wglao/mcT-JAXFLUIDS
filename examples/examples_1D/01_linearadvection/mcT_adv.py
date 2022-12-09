@@ -1,4 +1,4 @@
-from typing import Tuple, NamedTuple, Optional, Iterable
+from typing import Tuple, NamedTuple, Optional, Iterable, Union
 import time, os, wandb
 import shutil, functools
 import numpy as np
@@ -51,11 +51,10 @@ class TrainingState(NamedTuple):
 # dense network, layer count variable not yet implemented
 def mcT_fn(state: jnp.ndarray) -> jnp.ndarray:
     """Dense network with 1 layer of ReLU units"""
-    n_faces = setup.nx + 1
     mcT = hk.Sequential([
         hk.Flatten(),
-        hk.Linear(n_faces), jax.nn.relu,
-        hk.Linear(1)
+        hk.Linear(5*(setup.nx + 1)), jax.nn.relu,
+        hk.Linear(setup.nx + 1)
     ])
     flux = mcT(state)
     return flux
@@ -77,6 +76,30 @@ def load_params(path: str, filename: Optional[str] = None):
         params = pickle.load(fp)
         fp.close()
     return jax.device_put(params)
+
+def compare_params(params: hk.Params, shapes: Union[Iterable[Iterable[int]],hk.Params]) -> bool:
+    """
+    Compares two sets of network parameters or a parameter dict with a list of prescribed shapes
+    Returns True if the params dict has all correct shapes
+
+    ----- inputs -----\n
+    :param params: network params to be checked
+    :param shapes: baseline list of shapes or another parameter dict to compare to
+
+    ----- returns -----\n
+    :return match: True if shapes are correct
+    """
+    for ii, layer in enumerate(params):
+        for jj, wb in enumerate(layer):
+            if jnp.isnan(layer[wb]).any():
+                return False
+            if type(shapes) == list:
+                if layer[wb].shape != shapes[2*ii+jj]:
+                    return False
+            else:
+                if layer[wb].shape != shapes[layer][wb]:
+                    return False
+    return True
 
 @jit
 def _mse(array: jnp.ndarray):
@@ -407,11 +430,16 @@ optimizer = optax.adam(setup.learning_rate)
 
 if __name__ == "__main__":
     # data input will be mean(primes_L[0], primes_R[0]) -> [(nx+1),1,1]
-    data_init = jnp.empty((setup.nx+1,1,1))
+    data_init = jnp.empty((1,setup.nx+1,setup.ny,setup.nz))
+    initial_params = net.init(jrand.PRNGKey(1), data_init)
     if os.path.exists(os.path.join(param_path,'last.pkl')):
-        initial_params = load_params(param_path,'last.pkl')
-    else:
-        initial_params = net.init(jrand.PRNGKey(1), data_init)
+        last_params = load_params(param_path,'last.pkl')    
+        if compare_params(last_params,initial_params):
+            initial_params = last_params
+        else:
+            del initial_params
+            os.system('rm {}'.format(os.path.join(param_path,'last.pkl')))
+
     initial_opt_state = optimizer.init(initial_params)
 
     state = TrainingState(initial_params, initial_opt_state, 0)

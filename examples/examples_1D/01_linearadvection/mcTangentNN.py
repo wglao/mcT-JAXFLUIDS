@@ -58,9 +58,11 @@ class mcTangentNN(RiemannSolver):
 
         fluxes_xi = jnp.zeros_like(primes_L)
         nx = primes_L.shape[1]
+        ny = primes_L.shape[2]
+        nz = primes_L.shape[3]
 
         # EVALUATE NEURAL NETWORK FOR TANGENT MANIFOLD
-        primes = jnp.mean(jnp.array([primes_L[0], primes_R[0]]),axis=0)
+        primes = jnp.reshape(jnp.mean(jnp.array([primes_L[0], primes_R[0]]),axis=0),(1,nx,ny,nz))
         net_out = jnp.reshape(net.apply(params, primes),fluxes_xi.shape[1:])
         fluxes_xi = fluxes_xi.at[0,...].set(net_out)
         return fluxes_xi
