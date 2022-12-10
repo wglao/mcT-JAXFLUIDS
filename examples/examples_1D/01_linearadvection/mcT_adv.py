@@ -488,7 +488,7 @@ if __name__ == "__main__":
     params_best = load_params(os.path.join(param_path,"best.pkl"))
 
     ml_parameters_dict = {"riemann_solver":params_best}
-    ml_networks_dict = hk.data_structures.to_immutable_dict({"riemannsolver": mcT_net})
+    ml_networks_dict = hk.data_structures.to_immutable_dict({"riemannsolver": net})
 
     input_reader = InputReader(coarse_case,coarse_num)
     initializer = Initializer(input_reader)
