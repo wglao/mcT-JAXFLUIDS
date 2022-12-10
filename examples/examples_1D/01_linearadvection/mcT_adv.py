@@ -212,7 +212,7 @@ def _get_loss_sample(params: hk.Params, sample:jnp.ndarray) -> float:
     if not setup.mc_flag:
         return ml_loss_sample
     if jnp.isnan(ml_pred_arr).any() or (ml_pred_arr<0).any():
-        return (setup.mc_alpha+1)*ml_loss_sample
+        return (setup.mc_alpha*10)*ml_loss_sample
     
     # mc loss
     coarse_num['conservatives']['convective_fluxes']['riemann_solver'] = "HLLC"
@@ -404,7 +404,7 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
                 params_new, opt_state_new, loss_new = update(params_par, opt_par, train_par)
                 state = TrainingState(params_new[0],opt_state_new[0],loss_new[0])
             else:
-                params_new, opt_state_new, loss_new = update(state.params, state.opt_state, train_batch[batch])
+                params_new, opt_state_new, loss_new = update(state.params, state.opt_state, jax.device_put(train_batch[batch]))
                 state = TrainingState(params_new,opt_state_new,loss_new)
 
         # call test function
