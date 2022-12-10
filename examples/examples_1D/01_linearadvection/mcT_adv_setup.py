@@ -5,6 +5,7 @@ import wandb
 import numpy as np
 import jax.random as jrand
 import jax.numpy as jnp
+from jax.config import config
 """parameters for initializing mcTangent"""
 work = functools.partial(os.path.join,'./')
 save_path = work('data')
@@ -14,26 +15,8 @@ parallel_flag = False
 mc_flag = True
 noise_flag = True
 
-class Cases():
-    """
-    Holds a stack of case setup dicts that can only be popped
-    """
-    def __init__(self,cases: list):
-        self.cases = cases
-    
-    def next(self) -> dict:
-        """
-        pops last case
-        """
-        try:
-            return self.cases.pop()
-        except Exception as e:
-            print(e)
-    
-    def size(self):
-        return len(self.cases)
-
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "true"
+# os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "true"
+config.update("jax_debug_nans", True)
 case_name = 'mcT_adv'
 
 c = 0.9
@@ -92,6 +75,25 @@ f.close()
 
 numerical['conservatives']['time_integration']['fixed_timestep'] = 0.1*dt
 numerical['conservatives']['convective_fluxes']['riemann_solver'] = "HLLC"
+
+class Cases():
+    """
+    Holds a stack of case setup dicts that can only be popped
+    """
+    def __init__(self,cases: list):
+        self.cases = cases
+    
+    def next(self) -> dict:
+        """
+        pops last case
+        """
+        try:
+            return self.cases.pop()
+        except Exception as e:
+            print(e)
+    
+    def size(self):
+        return len(self.cases)
 
 # random coefficients for initial conditions
 def pos_coefs(seed: int, out_shape: Union[tuple,int]) -> jnp.ndarray:
