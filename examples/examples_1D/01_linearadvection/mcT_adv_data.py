@@ -44,6 +44,9 @@ class Data():
     def next_sim(self) -> Sim:
 
         sim_path = self.sims.pop()
+        # cycle sim to other end of list
+        self.sims = [sim_path] + self.sims
+        
         sim_name = re.split(r'-\d+',sim_path)[0] if re.split(r'-\d+',sim_path) else sim_path
         domain = os.path.join(self.save_path,sim_path,'domain')
         
