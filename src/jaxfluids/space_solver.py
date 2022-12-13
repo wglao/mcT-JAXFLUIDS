@@ -127,16 +127,16 @@ class SpaceSolver:
         """
 
         # COMPUTE TEMPERATURE
-        if self.is_viscous_flux or self.is_heat_flux:
-            temperature = self.material_manager.get_temperature(primes[4:5], primes[0:1])
+        # if self.is_viscous_flux or self.is_heat_flux:
+        #     temperature = self.material_manager.get_temperature(primes[4:5], primes[0:1])
 
         # COMPUTE INTERFACE VELOCITY AND INTERFACE PRESSURE
-        if self.levelset_type == "FLUID-FLUID":
-            interface_velocity, interface_pressure, residual_interface = self.levelset_handler.compute_interface_quantities(primes, levelset, volume_fraction)
-        elif self.levelset_type == "FLUID-SOLID-DYNAMIC":
-            interface_velocity, interface_pressure, residual_interface = self.levelset_handler.compute_solid_interface_velocity(current_time), None, None
-        else:
-            interface_velocity, interface_pressure, residual_interface = None, None, None
+        # if self.levelset_type == "FLUID-FLUID":
+        #     interface_velocity, interface_pressure, residual_interface = self.levelset_handler.compute_interface_quantities(primes, levelset, volume_fraction)
+        # elif self.levelset_type == "FLUID-SOLID-DYNAMIC":
+        #     interface_velocity, interface_pressure, residual_interface = self.levelset_handler.compute_solid_interface_velocity(current_time), None, None
+        # else:
+        interface_velocity, interface_pressure, residual_interface = None, None, None
 
         # INITIALIZE RHS VARIABLES
         rhs_cons, rhs_levelset = 0.0, 0.0 if self.levelset_type != None else None
@@ -150,50 +150,50 @@ class SpaceSolver:
             if self.is_convective_flux:
                 flux_xi += self.flux_computer.compute_convective_flux_xi(primes, cons, axis, ml_parameters_dict, ml_networks_dict)
             
-            # VISCOUS CONTRIBUTION
-            if self.is_viscous_flux:
-                flux_xi -= self.source_term_solver.compute_viscous_flux_xi(primes[1:4], temperature, axis)
+            # # VISCOUS CONTRIBUTION
+            # if self.is_viscous_flux:
+            #     flux_xi -= self.source_term_solver.compute_viscous_flux_xi(primes[1:4], temperature, axis)
 
-            # HEAT CONTRIBUTION
-            if self.is_heat_flux:
-                flux_xi += self.source_term_solver.compute_heat_flux_xi(temperature, axis)
+            # # HEAT CONTRIBUTION
+            # if self.is_heat_flux:
+            #     flux_xi += self.source_term_solver.compute_heat_flux_xi(temperature, axis)
 
-            # WEIGHT FLUXES
-            if self.levelset_type != None:
-                flux_xi = self.levelset_handler.weight_cell_face_flux_xi(flux_xi, apertures[axis])
+            # # WEIGHT FLUXES
+            # if self.levelset_type != None:
+            #     flux_xi = self.levelset_handler.weight_cell_face_flux_xi(flux_xi, apertures[axis])
 
             # SUM RIGHT HAND SIDE
             if self.is_convective_flux or self.is_viscous_flux or self.is_heat_flux:
                 rhs_cons += self.one_cell_size[axis] * (flux_xi[self.flux_slices[axis][1]] - flux_xi[self.flux_slices[axis][0]])
 
             # INTERFACE FLUXES
-            if self.levelset_type != None:
-                interface_flux_xi = self.levelset_handler.compute_interface_flux_xi(primes, levelset, interface_velocity, interface_pressure, volume_fraction, apertures[axis], axis)
-                rhs_cons += self.one_cell_size[axis] * interface_flux_xi
+            # if self.levelset_type != None:
+            #     interface_flux_xi = self.levelset_handler.compute_interface_flux_xi(primes, levelset, interface_velocity, interface_pressure, volume_fraction, apertures[axis], axis)
+            #     rhs_cons += self.one_cell_size[axis] * interface_flux_xi
 
             # LEVELSET ADVECTION
-            if self.levelset_type in ["FLUID-FLUID", "FLUID-SOLID-DYNAMIC"]:
-                rhs_contribution_levelset = self.levelset_handler.compute_levelset_advection_rhs(levelset, interface_velocity, axis)
-                rhs_levelset += rhs_contribution_levelset
+            # if self.levelset_type in ["FLUID-FLUID", "FLUID-SOLID-DYNAMIC"]:
+            #     rhs_contribution_levelset = self.levelset_handler.compute_levelset_advection_rhs(levelset, interface_velocity, axis)
+            #     rhs_levelset += rhs_contribution_levelset
 
         # VOLUME FORCES
-        if self.is_volume_force:
-            volume_forces = self.source_term_solver.compute_gravity_forces(primes)
-            if self.levelset_type != None:
-                volume_forces = self.levelset_handler.weight_volume_force(volume_forces, volume_fraction)
-            rhs_cons += volume_forces
+        # if self.is_volume_force:
+        #     volume_forces = self.source_term_solver.compute_gravity_forces(primes)
+        #     if self.levelset_type != None:
+        #         volume_forces = self.levelset_handler.weight_volume_force(volume_forces, volume_fraction)
+        #     rhs_cons += volume_forces
 
         # FORCINGS
-        if forcings_dictionary:
-            for key in forcings_dictionary:
-                forcing = forcings_dictionary[key]["force"]
-                if self.levelset_type != None:
-                    forcing = self.levelset_handler.weight_volume_force(forcing, volume_fraction)
-                rhs_cons += forcing
+        # if forcings_dictionary:
+        #     for key in forcings_dictionary:
+        #         forcing = forcings_dictionary[key]["force"]
+        #         if self.levelset_type != None:
+        #             forcing = self.levelset_handler.weight_volume_force(forcing, volume_fraction)
+        #         rhs_cons += forcing
 
         # CLEAN RHS
-        if self.levelset_type != None:
-            mask_real, _ = self.levelset_handler.compute_masks(levelset, volume_fraction)
-            rhs_cons *= mask_real[...,self.nhx_,self.nhy_,self.nhz_]
+        # if self.levelset_type != None:
+        #     mask_real, _ = self.levelset_handler.compute_masks(levelset, volume_fraction)
+        #     rhs_cons *= mask_real[...,self.nhx_,self.nhy_,self.nhz_]
 
         return rhs_cons, rhs_levelset, residual_interface

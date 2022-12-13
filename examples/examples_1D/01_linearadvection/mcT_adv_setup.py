@@ -12,8 +12,8 @@ save_path = work('data')
 parallel_flag = False
 
 # data only
-mc_flag = True
-noise_flag = True
+mc_flag = False
+noise_flag = False
 
 # os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "true"
 config.update("jax_debug_nans", True)
@@ -23,7 +23,7 @@ c = 0.9
 u = 1.0
 
 t_max = 2.0
-nt = 200
+nt = 500
 dt = t_max/nt
 
 x_max = 2.0
@@ -42,8 +42,8 @@ mc_alpha = 1e5 if mc_flag else 0
 noise_level = 0.02 if noise_flag else 0
 
 num_epochs = int(1e4)
-learning_rate = 1e-3
-batch_size = 5
+learning_rate = 5e-4
+batch_size = 10
 ns = 1
 layers = 1
 

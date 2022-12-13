@@ -1,4 +1,18 @@
 # %% imports
+import matplotlib.pyplot as plt
+import pandas as pd
+import matplotlib
+import matplotlib.pylab as pylab
+from matplotlib.lines import Line2D
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib import cm  # Colour map
+import matplotlib.animation as animatio
+import matplotlib.font_manager
+params = {'legend.fontsize': 14, 'axes.labelsize': 16, 'axes.titlesize': 20, 'xtick.labelsize': 14, 'ytick.labelsize': 14}
+pylab.rcParams.update(params)
+matplotlib.rcParams['mathtext.fontset'] = 'cm'
+matplotlib.rcParams['mathtext.rm'] = 'serif'
+plt.rcParams['font.family'] = 'TimesNewRoman'
 
 from typing import Tuple, NamedTuple, Optional, Iterable
 import time, os, wandb
@@ -131,7 +145,7 @@ if setup.noise_flag:
 print('\n','-'*10,'Add Noise Pass','-'*10,'\n')
 
 # %% NN
-state = jrand.normal(rng.pop(),(setup.nx+1,1,1))+1
+state = jrand.normal(rng.pop(),(1,setup.nx+1,1,1))+1
 t1 = time.time()
 flux = net.apply(initial_params,state)
 t2 = time.time()
@@ -154,7 +168,10 @@ print('\n','-'*10,'NN Apply Pass','-'*10,'\n')
 sim = dat.data.next_sim()
 _,_,_, data = sim.load()
 data_coarse = get_coarse(data)
-data_seq = np.array([[data_coarse[:, ii:(ii+setup.ns+2), ...] for ii in range(setup.nt-setup.ns-1)]])
+data_coarse = jax.device_get(data_coarse)
+data_coarse = np.reshape(data_coarse,(1,5,setup.nt+1,setup.nx,1,1))
+data_seq = np.array([data_coarse[:,:, ii:(ii+setup.ns+2), ...] for ii in range(setup.nt-setup.ns-1)])
+data_seq = np.moveaxis(data_seq,0,2)
 del data
 dat.data.check_sims()
 
@@ -168,6 +185,7 @@ print('time: %s s' %(t2-t1))
 
 if loss.dtype != jnp.dtype('float64') or loss._value.max == jnp.nan:
     raise "ML Loss function failed"
+
 
 print('\n','-'*10,'ML Loss Function Pass','-'*10,'\n')
 
@@ -187,17 +205,16 @@ print('\n','-'*10,'MC Loss Function Pass','-'*10,'\n')
 
 # %% Test
 
-data = np.array([data_coarse])
 dat.data.check_sims()
 
 t1 = time.time()
-err = evaluate_epoch(initial_params, data)
+err = evaluate_epoch(initial_params, data_coarse)
 t2 = time.time()
 
 print('\nError: %s' %err, type(err))
 print('time: %s s' %(t2-t1))
 
-if err.dtype != jnp.dtype('float64') or err._value.max == jnp.nan:
+if type(err) != float or jnp.isnan(err):
     raise "Evaluate function failed"
 
 print('\n','-'*10,'Evaluate Function Pass','-'*10,'\n')
@@ -229,7 +246,7 @@ if setup.parallel_flag:
 
 else:
     t1 = time.time()
-    params_new, opt_state_new, loss_new = update(initial_params,initial_opt_state,data_seq)
+    params_new, opt_state_new, loss_new = update(initial_params,initial_opt_state,jax.device_put(data_seq))
     t2 = time.time()
 
     print("Types of updated state:")

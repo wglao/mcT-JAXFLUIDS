@@ -1,5 +1,5 @@
 from typing import Tuple, NamedTuple, Optional, Iterable, Union
-import time, os, wandb
+import time, os, wandb, sys
 import shutil, functools
 import numpy as np
 import re
@@ -13,6 +13,7 @@ import pickle
 import haiku as hk
 import optax
 from jaxfluids import InputReader, Initializer, SimulationManager
+import simMan
 from jaxfluids.post_process import load_data
 import matplotlib.pyplot as plt
 
@@ -90,14 +91,14 @@ def compare_params(params: hk.Params, shapes: Union[Iterable[Iterable[int]],hk.P
     :return match: True if shapes are correct
     """
     for ii, layer in enumerate(params):
-        for jj, wb in enumerate(layer):
-            if jnp.isnan(layer[wb]).any():
+        for jj, wb in enumerate(params[layer]):
+            if jnp.isnan(params[layer][wb]).any():
                 return False
             if type(shapes) == list:
-                if layer[wb].shape != shapes[2*ii+jj]:
+                if params[layer][wb].shape != shapes[2*ii+jj]:
                     return False
             else:
-                if layer[wb].shape != shapes[layer][wb]:
+                if jnp.sum(jnp.array([i != j for i,j in zip(params[layer][wb].shape,shapes[layer][wb])])):
                     return False
     return True
 
@@ -151,6 +152,26 @@ def get_coarse(data_fine, seed: Optional[int] = 1) -> jnp.ndarray:
     
     return data_coarse
 
+def get_par_batch(serial):
+    n_dev = jax.local_device_count()
+    # print('batching for %s devices' %n_dev)
+    if isinstance(serial, jnp.ndarray):
+        return jnp.array_split(serial, n_dev)
+    else:
+        return jax.tree_map(lambda x: jnp.array([x] * n_dev), serial)
+
+# def smart_feed_forward():
+#     """
+#     Rebatches the initial condition
+#     """
+#     ml_pred_arr, _ = sim_manager.feed_forward(
+#         ml_primes_init,
+#         setup.ns+1,
+#         coarse_case['general']['save_dt'],
+#         0, 1,
+#         ml_parameters_dict,
+#         ml_networks_dict
+#     )
 
 def _get_loss_sample(params: hk.Params, sample:jnp.ndarray) -> float:
     """
@@ -175,29 +196,45 @@ def _get_loss_sample(params: hk.Params, sample:jnp.ndarray) -> float:
     ml_networks_dict = hk.data_structures.to_immutable_dict({"riemann_solver": net})
 
     input_reader = InputReader(coarse_case,coarse_num)
-    sim_manager = SimulationManager(input_reader)
+    # sim_manager = SimulationManager(input_reader)
+    sim_manager = simMan.SimulationManager(input_reader)
 
     # switch 0th axis to time for feed forward mapping
-    # sample = jnp.swapaxes(sample,1,0)
+    sample = jnp.swapaxes(sample,1,0)
     ml_primes_init = sample[:,:,0,...]
-    
 
-    # # use partial to avoid jax type error
-    # feed_forward = functools.partial(sim_manager.feed_forward,
-    #     n_steps=setup.ns+1,
-    #     timestep_size=coarse_case['general']['save_dt'],
-    #     t_start=0,
-    #     ml_parameters_dict=ml_parameters_dict,
-    #     ml_networks_dict=ml_networks_dict)
-    
-    # ml_pred_arr, _ = feed_forward(
+    # if setup.parallel_flag:
+    #     # feed_forward = pmap(sim_manager.feed_forward,axis_name='data')
+    #     # ml_pred_arr, _ = feed_forward(
+    #     #     get_par_batch(ml_primes_init),
+    #     #     jnp.empty_like(get_par_batch(ml_primes_init)), # not needed for single-phase, but is a required arg for feed_forward
+    #     #     get_par_batch(setup.ns+1),
+    #     #     get_par_batch(coarse_case['general']['save_dt']),
+    #     #     get_par_batch(0), get_par_batch(1),
+    #     #     get_par_batch(ml_parameters_dict),
+    #     #     get_par_batch(ml_networks_dict)
+    #     # )
+    #     feed_forward = pmap(sim_manager.feed_forward,axis_name='data')
+    #     ml_pred_arr, _ = feed_forward(
+    #         get_par_batch(ml_primes_init),
+    #         get_par_batch(setup.ns+1),
+    #         get_par_batch(coarse_case['general']['save_dt']),
+    #         get_par_batch(0), get_par_batch(1),
+    #         get_par_batch(ml_parameters_dict),
+    #         get_par_batch(ml_networks_dict)
+    #     )
+    # else:
+    # ml_pred_arr, _ = sim_manager.feed_forward(
     #     ml_primes_init,
-    #     jnp.empty_like(ml_primes_init) # not needed for single-phase, but is a required arg for feed_forward
+    #     jnp.empty_like(ml_primes_init), # not needed for single-phase, but is a required arg for feed_forward
+    #     setup.ns+1,
+    #     coarse_case['general']['save_dt'],
+    #     0, 1,
+    #     ml_parameters_dict,
+    #     ml_networks_dict
     # )
-
     ml_pred_arr, _ = sim_manager.feed_forward(
         ml_primes_init,
-        jnp.empty_like(ml_primes_init), # not needed for single-phase, but is a required arg for feed_forward
         setup.ns+1,
         coarse_case['general']['save_dt'],
         0, 1,
@@ -209,46 +246,44 @@ def _get_loss_sample(params: hk.Params, sample:jnp.ndarray) -> float:
     # ml loss
     ml_loss_sample = mse(ml_pred_arr[:,:,1:,...], sample[:,:,1:,...])
 
-    if not setup.mc_flag:
-        return ml_loss_sample
-    if jnp.isnan(ml_pred_arr).any() or (ml_pred_arr<0).any():
-        return (setup.mc_alpha*10)*ml_loss_sample
+    return ml_loss_sample
+    # if not setup.mc_flag:
+    # if jnp.isnan(ml_pred_arr).any() or (ml_pred_arr<0).any():
+    #     return (setup.mc_alpha*10)*ml_loss_sample
     
     # mc loss
-    coarse_num['conservatives']['convective_fluxes']['riemann_solver'] = "HLLC"
-    input_reader = InputReader(coarse_case,coarse_num)
-    sim_manager = SimulationManager(input_reader)
+    # coarse_num['conservatives']['convective_fluxes']['riemann_solver'] = "HLLC"
+    # input_reader = InputReader(coarse_case,coarse_num)
+    # sim_manager = SimulationManager(input_reader)
     
-    #  map over times, concatenate all sequences
-    mc_primes_init = jnp.concatenate(jnp.swapaxes(ml_pred_arr[:,:,:-1,...],1,2))
+    # #  map over times, concatenate all sequences
+    # mc_primes_init = jnp.concatenate(jnp.swapaxes(ml_pred_arr[:,:,:-1,...],1,2))
 
-    mc_pred_arr, _ = sim_manager.feed_forward(
-        mc_primes_init,
-        jnp.empty_like(mc_primes_init), # not needed for single-phase, but is a required arg
-        1, coarse_case['general']['save_dt'], 0
-    )
-    mc_pred_arr = jnp.nan_to_num(mc_pred_arr)
+    # mc_pred_arr, _ = sim_manager.feed_forward(
+    #     mc_primes_init,
+    #     jnp.empty_like(mc_primes_init), # not needed for single-phase, but is a required arg
+    #     1, coarse_case['general']['save_dt'], 0
+    # )
+    # mc_pred_arr = jnp.nan_to_num(mc_pred_arr)
 
-    ml_pred_mcloss = jnp.concatenate(jnp.swapaxes(ml_pred_arr[:,:,1:,...],1,2))
-    mc_loss_sample = setup.mc_alpha * mse(ml_pred_mcloss,mc_pred_arr[jnp.s_[:,-1,...]])
-    loss_sample = ml_loss_sample + mc_loss_sample
-    return loss_sample
+    # ml_pred_mcloss = jnp.concatenate(jnp.swapaxes(ml_pred_arr[:,:,1:,...],1,2))
+    # mc_loss_sample = setup.mc_alpha * mse(ml_pred_mcloss,mc_pred_arr[jnp.s_[:,-1,...]])
+    # loss_sample = ml_loss_sample + mc_loss_sample
+    # return loss_sample
 
-def get_loss_batch(params: hk.Params, data: jnp.ndarray) -> float:
-    """
-    vectorized version of _get_loss_sample
+# def get_loss_batch(params: hk.Params, sample: jnp.ndarray) -> float:
+#     """
+#     vectorized version of _get_loss_sample
 
-    ----- inputs -----\n
-    :param params: holds parameters of the NN
-    :param data: sequenced training data, of shape [samples, primes, sequences, timesteps, xs]
+#     ----- inputs -----\n
+#     :param params: holds parameters of the NN
+#     :param sample: sequenced training data sample, of shape [primes, sequences, timesteps, xs]
 
-    ----- returns -----\n
-    :return loss_batch: average loss over batch
-    """
-    loss_batch = 0
-    for sample in data:
-        loss_batch += _get_loss_sample(params,sample)/data.shape[0]
-    return loss_batch
+#     ----- returns -----\n
+#     :return loss_batch: average loss over batch
+#     """
+#     # loss_batch = 
+#     return _get_loss_sample(params,sample)
 
 def _evaluate_sample(params: hk.Params, sample: jnp.ndarray) -> jnp.ndarray:
     """
@@ -277,20 +312,24 @@ def _evaluate_sample(params: hk.Params, sample: jnp.ndarray) -> jnp.ndarray:
 
     input_reader = InputReader(coarse_case,coarse_num)
     initializer = Initializer(input_reader)
-    sim_manager = SimulationManager(input_reader)
+    # sim_manager = SimulationManager(input_reader)
+    sim_manager = simMan.SimulationManager(input_reader)
     buffer_dictionary = initializer.initialization()
     buffer_dictionary['machinelearning_modules'] = {
         'ml_parameters_dict': ml_parameters_dict,
         'ml_networks_dict': ml_networks_dict
     }
-    sim_manager.simulate(buffer_dictionary)
+    try:
+        sim_manager.simulate(buffer_dictionary)
 
-    # get error
-    path = sim_manager.output_writer.save_path_domain
-    quantities = ['density','velocityX','velocityY','velocityZ','pressure']
-    _, _, _, data_dict_mcT = load_data(path, quantities)
-    mcT_pred = jnp.array([data_dict_mcT[quant] for quant in data_dict_mcT.keys()])
-    err_sample = mse(mcT_pred, sample)
+        # get error
+        path = sim_manager.output_writer.save_path_domain
+        quantities = ['density','velocityX','velocityY','velocityZ','pressure']
+        _, _, _, data_dict_mcT = load_data(path, quantities)
+        mcT_pred = jnp.array([data_dict_mcT[quant] for quant in data_dict_mcT.keys()])
+        err_sample = mse(mcT_pred, sample)
+    except:
+        err_sample = sys.float_info.max
 
     # clean
     os.system('rm -rf {}/*'.format(test_path))
@@ -314,53 +353,66 @@ def evaluate_epoch(params: hk.Params, data: jnp.ndarray) -> float:
         err_epoch += _evaluate_sample(params,sample)/setup.num_test
     return err_epoch
 
-if setup.parallel_flag:
-    @functools.partial(pmap, axis_name='data')
-    def update(params: hk.Params, opt_state: optax.OptState, data: jnp.ndarray) -> Tuple:
-        """
-        Evaluates network loss and gradients
-        Applies optimizer updates and returns the new parameters, state, and loss
+# @functools.partial(pmap, axis_name='data', in_axes=(0,0,0))
+# def update_par(params: hk.Params, opt_state: optax.OptState, data: jnp.ndarray) -> Tuple:
+#     """
+#     Evaluates network loss and gradients
+#     Applies optimizer updates and returns the new parameters, state, and loss
 
-        ----- inputs -----\n
-        :param params: current network params
-        :param opt_state: current optimizer state
-        :param data: array of sequenced training data, of shape [samples, primes, sequences, timesteps, xs]
+#     ----- inputs -----\n
+#     :param params: current network params
+#     :param opt_state: current optimizer state
+#     :param data: array of sequenced training data, of shape [samples, primes, sequences, timesteps, xs]
 
-        ----- returns -----\n
-        :return state: tuple of arrays containing updated params, optimizer state, as loss
-        """
+#     ----- returns -----\n
+#     :return state: tuple of arrays containing updated params, optimizer state, as loss
+#     """
 
-        loss_batch, grads_batch = value_and_grad(get_loss_batch, argnums=0, allow_int=True)(params, data)
+#     loss_batch, grads_batch = value_and_grad(get_loss_batch, argnums=0, allow_int=True)(params, data)
 
-        grads = lax.pmean(grads_batch, axis_name='data')
-        loss = lax.pmean(loss_batch, axis_name='data')
+#     grads = lax.pmean(grads_batch, axis_name='data')
+#     loss = lax.pmean(loss_batch, axis_name='data')
 
-        updates, opt_state_new = optimizer.update(grads, opt_state)
-        params_new = optax.apply_updates(params, updates)
-        # params_new = jax.tree_map(lambda p, g: optax.apply_updates(p,g), params, updates)
+#     updates, opt_state_new = optimizer.update(grads, opt_state)
+#     params_new = optax.apply_updates(params, updates)
+#     # params_new = jax.tree_map(lambda p, g: optax.apply_updates(p,g), params, updates)
 
-        return params_new, opt_state_new, loss
-else:
-    def update(params: hk.Params, opt_state: optax.OptState, data: jnp.ndarray) -> Tuple:
-        """
-        Evaluates network loss and gradients
-        Applies optimizer updates and returns the new parameters, state, and loss
+#     return params_new, opt_state_new, loss
 
-        ----- inputs -----\n
-        :param params: current network params
-        :param opt_state: current optimizer state
-        :param data: array of sequenced training data, of shape [samples, primes, sequences, timesteps, xs]
+def update(params: hk.Params, opt_state: optax.OptState, data: jnp.ndarray) -> Tuple:
+    """
+    Evaluates network loss and gradients
+    Applies optimizer updates and returns the new parameters, state, and loss
 
-        ----- returns -----\n
-        :return state: tuple of arrays containing updated params, optimizer state, as loss
-        """
+    ----- inputs -----\n
+    :param params: current network params
+    :param opt_state: current optimizer state
+    :param data: array of sequenced training data, of shape [samples, primes, sequences, timesteps, xs(, ys, zs)]
 
-        loss, grads = value_and_grad(get_loss_batch, argnums=0, allow_int=True)(params, data)
+    ----- returns -----\n
+    :return state: tuple of arrays containing updated params, optimizer state, as loss
+    """
+    # loop through data to lower memory cost
+    loss_list = []
+    grads_list = []
+    for sample in data:
+        loss_sample, grad_sample = value_and_grad(_get_loss_sample, argnums=0, allow_int=True)(params, sample)
+        loss_list += [loss_sample]
+        grads_list += [grad_sample]
+    
+    # average loss and grad
+    loss = jnp.mean(jnp.array(loss_list))
+    grads = {}
+    for layer in params:
+        if layer not in grads.keys():
+            grads[layer] = {}
+        for wb in params[layer]:
+            grads[layer][wb] = jnp.mean(jnp.array([grad[layer][wb] for grad in grads_list]), axis=0)
 
-        updates, opt_state_new = optimizer.update(grads, opt_state)
-        params_new = optax.apply_updates(params, updates)
+    updates, opt_state_new = optimizer.update(grads, opt_state)
+    params_new = optax.apply_updates(params, updates)
 
-        return params_new, opt_state_new, loss
+    return params_new, opt_state_new, loss
 
 def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -> Tuple[TrainingState,TrainingState]:
     """
@@ -385,7 +437,8 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
         test_coarse = vmap(get_coarse, in_axes=(0,None))(data_test,epoch)
 
         # sequence data
-        train_seq = np.array([train_coarse[:,:, ii:(ii+setup.ns+1), ...] for ii in range(setup.nt-setup.ns-1)])
+        train_seq = np.array([train_coarse[:,:, ii:(ii+setup.ns+2), ...] for ii in range(setup.nt-setup.ns-1)])
+        train_seq = np.moveaxis(train_seq,0,2)
         del train_coarse
 
         # batch data
@@ -395,17 +448,17 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
         t1 = time.time()
         for batch in range(setup.num_batches):
             # call update function
-            if setup.parallel_flag:
-                n_dev = jax.local_device_count()
-                print('batching for %s devices' %n_dev)
-                train_par = np.array_split(train_batch[batch], n_dev)
-                params_par = jax.tree_map(lambda x: jnp.array([x] * n_dev), state.params)
-                opt_par = jax.tree_map(lambda x: jnp.array([x] * n_dev), state.opt_state)
-                params_new, opt_state_new, loss_new = update(params_par, opt_par, train_par)
-                state = TrainingState(params_new[0],opt_state_new[0],loss_new[0])
-            else:
-                params_new, opt_state_new, loss_new = update(state.params, state.opt_state, jax.device_put(train_batch[batch]))
-                state = TrainingState(params_new,opt_state_new,loss_new)
+            # if setup.parallel_flag:
+            #     n_dev = jax.local_device_count()
+            #     print('batching for %s devices' %n_dev)
+            #     train_par = np.array_split(train_batch[batch], n_dev)
+            #     params_par = jax.tree_map(lambda x: jnp.array([x] * n_dev), state.params)
+            #     opt_par = jax.tree_map(lambda x: jnp.array([x] * n_dev), state.opt_state)
+            #     params_new, opt_state_new, loss_new = update_par(params_par, opt_par, train_par)
+            #     state = TrainingState(params_new[0],opt_state_new[0],loss_new[0])
+            # else:
+            params_new, opt_state_new, loss_new = update(state.params, state.opt_state, jax.device_put(train_batch[batch]))
+            state = TrainingState(params_new,opt_state_new,loss_new)
 
         # call test function
         test_err = evaluate_epoch(state.params, test_coarse)
@@ -439,7 +492,7 @@ if __name__ == "__main__":
         if compare_params(last_params,initial_params):
             initial_params = last_params
         else:
-            del initial_params
+            del last_params
             os.system('rm {}'.format(os.path.join(param_path,'last.pkl')))
 
     initial_opt_state = optimizer.init(initial_params)
@@ -474,7 +527,8 @@ if __name__ == "__main__":
     coarse_num['conservatives']['time_integration']['fixed_timestep'] = setup.dt
     input_reader = InputReader(coarse_case,coarse_num)
     initializer = Initializer(input_reader)
-    sim_manager = SimulationManager(input_reader)
+    # sim_manager = SimulationManager(input_reader)
+    sim_manager = simMan.SimulationManager(input_reader)
     buffer_dictionary = initializer.initialization()
     sim_manager.simulate(buffer_dictionary)
 
@@ -492,7 +546,8 @@ if __name__ == "__main__":
 
     input_reader = InputReader(coarse_case,coarse_num)
     initializer = Initializer(input_reader)
-    sim_manager = SimulationManager(input_reader)
+    # sim_manager = SimulationManager(input_reader)
+    sim_manager = simMan.SimulationManager(input_reader)
     buffer_dictionary = initializer.initialization()
     buffer_dictionary['machinelearning_modules'] = {
         'ml_parameters_dict': ml_parameters_dict,

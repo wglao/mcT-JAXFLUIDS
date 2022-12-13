@@ -1,3 +1,5 @@
-08 12 2022:
+12 12 2022:
 
-Troubleshoot parallel execution
+Create simple feed forward without if statements
+figure out what is allocating unnecessarily
+create custom forward map
