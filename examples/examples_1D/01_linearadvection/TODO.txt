@@ -1,5 +1,5 @@
-12 12 2022:
+15 12 2022:
 
-Create simple feed forward without if statements
-figure out what is allocating unnecessarily
-create custom forward map
+Work out OOM errors
+- smaller batches? (batch sequences within sample)
+- mixed precision

@@ -61,7 +61,7 @@ def mcT_fn(state: jnp.ndarray) -> jnp.ndarray:
     return flux
 
 def save_params(params: hk.Params, path: str, filename: Optional[str] = None) -> None:
-    params = jax.device_get(params)
+    # params = jax.device_get(params)
     if filename:
         path = os.path.join(path,filename)
     os.makedirs(os.path.dirname(path),exist_ok=True)
@@ -76,7 +76,7 @@ def load_params(path: str, filename: Optional[str] = None):
     with open(path, 'rb') as fp:
         params = pickle.load(fp)
         fp.close()
-    return jax.device_put(params)
+    return params
 
 def compare_params(params: hk.Params, shapes: Union[Iterable[Iterable[int]],hk.Params]) -> bool:
     """
@@ -132,6 +132,7 @@ def _add_noise(arr: jnp.ndarray, seed: int, noise_level: float):
 def add_noise(arr: jnp.ndarray, seed: int):
     return functools.partial(_add_noise,noise_level=setup.noise_level)(arr,seed)
 
+@jit
 def get_coarse(data_fine, seed: Optional[int] = 1) -> jnp.ndarray:
     """
     down samples the data by factor of 4 for use in training.
@@ -431,6 +432,7 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
     epoch_min = 1
     best_state = state
     for epoch in range(setup.num_epochs):
+        os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "default"
         # reset each epoch
         state = TrainingState(state.params,state.opt_state,0)
         train_coarse = vmap(get_coarse, in_axes=(0,None))(data_train,epoch)
@@ -478,6 +480,8 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
         
         dat.data.check_sims()
         wandb.log({"Train loss": float(state.loss), "Test Error": float(test_err), 'TEST MIN': float(min_err), 'Epoch' : float(epoch)})
+        os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+
     return best_state, state
 
 net = hk.without_apply_rng(hk.transform(mcT_fn))

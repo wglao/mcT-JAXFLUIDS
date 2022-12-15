@@ -15,7 +15,7 @@ parallel_flag = False
 mc_flag = False
 noise_flag = False
 
-# os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "true"
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 config.update("jax_debug_nans", True)
 case_name = 'mcT_adv'
 
