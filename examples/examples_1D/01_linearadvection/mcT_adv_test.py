@@ -226,7 +226,7 @@ t2 = time.time()
 print('\nError: %s' %err, type(err))
 print('time: %s s' %(t2-t1))
 
-if type(err) != float or jnp.isnan(err):
+if err.dtype != jnp.dtype('float64') or jnp.isnan(err):
     raise "Evaluate function failed"
 
 print('\n','-'*10,'Evaluate Function Pass','-'*10,'\n')

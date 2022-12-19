@@ -330,7 +330,7 @@ def _evaluate_sample(params: hk.Params, sample: jnp.ndarray) -> jnp.ndarray:
         mcT_pred = jnp.array([data_dict_mcT[quant] for quant in data_dict_mcT.keys()])
         err_sample = mse(mcT_pred, sample)
     except:
-        err_sample = sys.float_info.max
+        err_sample = jnp.array([sys.float_info.max])
 
     # clean
     os.system('rm -rf {}/*'.format(test_path))
