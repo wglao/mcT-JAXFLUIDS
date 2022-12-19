@@ -210,7 +210,7 @@ grads = {}
 
 loss, grads = cumulate(loss,loss_mc,grads,grads_mc,1)
 
-if not isinstance(loss,float) or not isinstance(grads,dict):
+if loss.dtype != jnp.dtype('float64') or type(grads) != dict:
     raise "Cumulate function failed"
 
 print('\n','-'*10,'Cumulate Function Pass','-'*10,'\n')
