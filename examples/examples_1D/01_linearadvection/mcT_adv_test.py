@@ -210,7 +210,7 @@ grads = {}
 
 loss, grads = cumulate(loss,loss_mc,grads,grads_mc,1)
 
-if type(loss) != float or type(grads) != dict:
+if not isinstance(loss,float) or not isinstance(grads,dict):
     raise "Cumulate function failed"
 
 print('\n','-'*10,'Cumulate Function Pass','-'*10,'\n')
