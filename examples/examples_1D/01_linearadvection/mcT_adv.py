@@ -387,6 +387,8 @@ def cumulate(loss: float, loss_new: float, grads: dict, grads_new: dict, batch_s
         if layer not in grads.keys():
             grads[layer] = {}
         for wb in grads_new[layer]:
+            if wb not in grads[layer].keys():
+                grads[layer][wb] = jnp.zeros_like(grads_new[layer][wb])
             grads[layer][wb] += grads_new[layer][wb]/batch_size
     return loss, grads
 
