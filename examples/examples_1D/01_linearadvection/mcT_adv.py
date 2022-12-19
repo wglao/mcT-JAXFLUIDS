@@ -174,7 +174,7 @@ def get_par_batch(serial):
 #         ml_networks_dict
 #     )
 
-def _get_loss_sample(params: hk.Params, sample:jnp.ndarray) -> float:
+def get_loss_sample(params: hk.Params, sample:jnp.ndarray) -> float:
     """
     Uses a highly resolved simulation as ground truth to calculate loss over a sample
     
@@ -274,7 +274,7 @@ def _get_loss_sample(params: hk.Params, sample:jnp.ndarray) -> float:
 
 # def get_loss_batch(params: hk.Params, sample: jnp.ndarray) -> float:
 #     """
-#     vectorized version of _get_loss_sample
+#     vectorized version of get_loss_sample
 
 #     ----- inputs -----\n
 #     :param params: holds parameters of the NN
@@ -284,7 +284,7 @@ def _get_loss_sample(params: hk.Params, sample:jnp.ndarray) -> float:
 #     :return loss_batch: average loss over batch
 #     """
 #     # loss_batch = 
-#     return _get_loss_sample(params,sample)
+#     return get_loss_sample(params,sample)
 
 def _evaluate_sample(params: hk.Params, sample: jnp.ndarray) -> jnp.ndarray:
     """
@@ -407,7 +407,7 @@ def update(params: hk.Params, opt_state: optax.OptState, data: jnp.ndarray) -> T
     loss = 0
     grads = {}
     for sample in data:
-        loss_sample, grad_sample = value_and_grad(_get_loss_sample, argnums=0, allow_int=True)(params, sample)
+        loss_sample, grad_sample = value_and_grad(get_loss_sample, argnums=0, allow_int=True)(params, sample)
         loss, grads = cumulate(loss, loss_sample, grads, grad_sample, data.shape[0])
     
     updates, opt_state_new = optimizer.update(grads, opt_state)
@@ -506,8 +506,8 @@ if __name__ == "__main__":
     data_test, data_train = dat.data.load_all()
 
     # transfer to CPU
-    data_test = jax.device_get(data_test)
-    data_train = jax.device_get(data_train)
+    # data_test = jax.device_get(data_test)
+    # data_train = jax.device_get(data_train)
 
     best_state, end_state = Train(state, data_test, data_train)
 
