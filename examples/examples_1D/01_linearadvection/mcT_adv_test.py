@@ -177,7 +177,7 @@ dat.data.check_sims()
 
 setup.mc_flag = False
 t1 = time.time()
-loss = get_loss_batch(initial_params, data_seq)
+loss = get_loss_sample(initial_params, data_seq[0])
 t2 = time.time()
 
 print('\nLoss: %s' %loss, type(loss))
@@ -192,7 +192,7 @@ print('\n','-'*10,'ML Loss Function Pass','-'*10,'\n')
 # %% MC Loss
 setup.mc_flag = True
 t1 = time.time()
-loss = get_loss_batch(initial_params, data_seq)
+loss_mc, grads_mc = value_and_grad(get_loss_sample, argnums=0, allow_int=True)(initial_params, data_seq[0])
 t2 = time.time()
 
 print('\nLoss: %s' %loss, type(loss))
@@ -202,6 +202,18 @@ if loss.dtype != jnp.dtype('float64') or loss._value.max == jnp.nan:
     raise "MC Loss function failed"
 
 print('\n','-'*10,'MC Loss Function Pass','-'*10,'\n')
+
+# %% Cumulate Grads
+
+loss = 0
+grads = {}
+
+loss, grads = cumulate(loss,loss_mc,grads,grads_mc,1)
+
+if type(loss) != float or type(grads) != dict:
+    raise "Cumulate function failed"
+
+print('\n','-'*10,'Cumulate Function Pass','-'*10,'\n')
 
 # %% Test
 
