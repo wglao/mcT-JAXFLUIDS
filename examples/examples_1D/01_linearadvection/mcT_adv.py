@@ -380,6 +380,16 @@ def evaluate_epoch(params: hk.Params, data: jnp.ndarray) -> float:
 
 #     return params_new, opt_state_new, loss
 
+@jit
+def cumulate(loss: float, loss_new: float, grads: dict, grads_new: dict, batch_size: int):
+    loss += loss_new/batch_size
+    for layer in grads_new:
+        if layer not in grads.keys():
+            grads[layer] = {}
+        for wb in grads_new[layer]:
+            grads[layer][wb] += grads_new[layer][wb]/batch_size
+    return loss, grads
+
 def update(params: hk.Params, opt_state: optax.OptState, data: jnp.ndarray) -> Tuple:
     """
     Evaluates network loss and gradients
@@ -394,22 +404,12 @@ def update(params: hk.Params, opt_state: optax.OptState, data: jnp.ndarray) -> T
     :return state: tuple of arrays containing updated params, optimizer state, as loss
     """
     # loop through data to lower memory cost
-    loss_list = []
-    grads_list = []
+    loss = 0
+    grads = {}
     for sample in data:
         loss_sample, grad_sample = value_and_grad(_get_loss_sample, argnums=0, allow_int=True)(params, sample)
-        loss_list += [loss_sample]
-        grads_list += [grad_sample]
+        loss, grads = cumulate(loss, loss_sample, grads, grad_sample, data.shape[0])
     
-    # average loss and grad
-    loss = jnp.mean(jnp.array(loss_list))
-    grads = {}
-    for layer in params:
-        if layer not in grads.keys():
-            grads[layer] = {}
-        for wb in params[layer]:
-            grads[layer][wb] = jnp.mean(jnp.array([grad[layer][wb] for grad in grads_list]), axis=0)
-
     updates, opt_state_new = optimizer.update(grads, opt_state)
     params_new = optax.apply_updates(params, updates)
 
@@ -439,12 +439,12 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
         test_coarse = vmap(get_coarse, in_axes=(0,None))(data_test,epoch)
 
         # sequence data
-        train_seq = np.array([train_coarse[:,:, ii:(ii+setup.ns+2), ...] for ii in range(setup.nt-setup.ns-1)])
-        train_seq = np.moveaxis(train_seq,0,2)
+        train_seq = jnp.array([train_coarse[:,:, ii:(ii+setup.ns+2), ...] for ii in range(setup.nt-setup.ns-1)])
+        train_seq = jnp.moveaxis(train_seq,0,2)
         del train_coarse
 
         # batch data
-        train_batch = np.array_split(train_seq, setup.num_batches)
+        train_batch = jnp.array_split(train_seq, setup.num_batches)
         del train_seq
 
         t1 = time.time()
