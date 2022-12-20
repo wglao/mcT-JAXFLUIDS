@@ -197,8 +197,8 @@ def get_loss_sample(params: hk.Params, sample:jnp.ndarray) -> float:
     ml_networks_dict = hk.data_structures.to_immutable_dict({"riemann_solver": net})
 
     input_reader = InputReader(coarse_case,coarse_num)
-    # sim_manager = SimulationManager(input_reader)
-    sim_manager = simMan.SimulationManager(input_reader)
+    sim_manager = SimulationManager(input_reader)
+    # sim_manager = simMan.SimulationManager(input_reader)
 
     # switch 0th axis to time for feed forward mapping
     sample = jnp.swapaxes(sample,1,0)
@@ -225,23 +225,23 @@ def get_loss_sample(params: hk.Params, sample:jnp.ndarray) -> float:
     #         get_par_batch(ml_networks_dict)
     #     )
     # else:
-    # ml_pred_arr, _ = sim_manager.feed_forward(
-    #     ml_primes_init,
-    #     jnp.empty_like(ml_primes_init), # not needed for single-phase, but is a required arg for feed_forward
-    #     setup.ns+1,
-    #     coarse_case['general']['save_dt'],
-    #     0, 1,
-    #     ml_parameters_dict,
-    #     ml_networks_dict
-    # )
     ml_pred_arr, _ = sim_manager.feed_forward(
         ml_primes_init,
+        jnp.empty_like(ml_primes_init), # not needed for single-phase, but is a required arg for feed_forward
         setup.ns+1,
         coarse_case['general']['save_dt'],
         0, 1,
         ml_parameters_dict,
         ml_networks_dict
     )
+    # ml_pred_arr, _ = sim_manager.feed_forward(
+    #     ml_primes_init,
+    #     setup.ns+1,
+    #     coarse_case['general']['save_dt'],
+    #     0, 1,
+    #     ml_parameters_dict,
+    #     ml_networks_dict
+    # )
     ml_pred_arr = jnp.swapaxes(ml_pred_arr,1,2)
 
     # ml loss
@@ -313,8 +313,8 @@ def _evaluate_sample(params: hk.Params, sample: jnp.ndarray) -> jnp.ndarray:
 
     input_reader = InputReader(coarse_case,coarse_num)
     initializer = Initializer(input_reader)
-    # sim_manager = SimulationManager(input_reader)
-    sim_manager = simMan.SimulationManager(input_reader)
+    sim_manager = SimulationManager(input_reader)
+    # sim_manager = simMan.SimulationManager(input_reader)
     buffer_dictionary = initializer.initialization()
     buffer_dictionary['machinelearning_modules'] = {
         'ml_parameters_dict': ml_parameters_dict,
@@ -533,8 +533,8 @@ if __name__ == "__main__":
     coarse_num['conservatives']['time_integration']['fixed_timestep'] = setup.dt
     input_reader = InputReader(coarse_case,coarse_num)
     initializer = Initializer(input_reader)
-    # sim_manager = SimulationManager(input_reader)
-    sim_manager = simMan.SimulationManager(input_reader)
+    sim_manager = SimulationManager(input_reader)
+    # sim_manager = simMan.SimulationManager(input_reader)
     buffer_dictionary = initializer.initialization()
     sim_manager.simulate(buffer_dictionary)
 
@@ -552,8 +552,8 @@ if __name__ == "__main__":
 
     input_reader = InputReader(coarse_case,coarse_num)
     initializer = Initializer(input_reader)
-    # sim_manager = SimulationManager(input_reader)
-    sim_manager = simMan.SimulationManager(input_reader)
+    sim_manager = SimulationManager(input_reader)
+    # sim_manager = simMan.SimulationManager(input_reader)
     buffer_dictionary = initializer.initialization()
     buffer_dictionary['machinelearning_modules'] = {
         'ml_parameters_dict': ml_parameters_dict,
