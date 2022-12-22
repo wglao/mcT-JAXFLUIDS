@@ -16,6 +16,7 @@ mc_flag = False
 noise_flag = False
 
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["XLA_FLAGS"] = "--xla_dump_to=/tmp/foo"
 config.update("jax_debug_nans", True)
 case_name = 'mcT_adv'
 
@@ -43,14 +44,17 @@ noise_level = 0.02 if noise_flag else 0
 
 num_epochs = int(1e4)
 learning_rate = 5e-4
-batch_size = 5
+batch_size = 10
 ns = 1
 layers = 1
 
 # sample set size
-num_train = 10
-num_test = 10
-num_batches = int(np.ceil(num_train/batch_size))
+num_train = 1
+num_test = 1
+
+# define batch by number of sequences trained on, instead of samples
+train_seqs = int(nt/2)
+num_batches = int(np.ceil(train_seqs/batch_size))
 
 
 # edit case setup

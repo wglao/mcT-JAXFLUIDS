@@ -47,6 +47,8 @@ initial_params = net.init(rng.pop(), data_init)
 initial_opt_state = optimizer.init(initial_params)
 
 state = TrainingState(initial_params, initial_opt_state, 0)
+
+print('\nNumber of Devices: %s' %jax.local_device_count())
 print('\n','-'*10,'Init Complete','-'*10,'\n')
 
 # %% Data Load
@@ -169,15 +171,15 @@ sim = dat.data.next_sim()
 _,_,_, data = sim.load()
 data_coarse = get_coarse(data)
 data_coarse = jax.device_get(data_coarse)
-data_coarse = np.reshape(data_coarse,(1,5,setup.nt+1,setup.nx,1,1))
-data_seq = np.array([data_coarse[:,:, ii:(ii+setup.ns+2), ...] for ii in range(setup.nt-setup.ns-1)])
-data_seq = np.moveaxis(data_seq,0,2)
+data_coarse = np.reshape(data_coarse,(5,setup.nt+1,setup.nx,1,1))
+data_seq = np.array([data_coarse[:, ii:(ii+setup.ns+2), ...] for ii in range(setup.nt-setup.ns-1)])
 del data
 dat.data.check_sims()
 
 setup.mc_flag = False
+sample = lax.dynamic_slice_in_dim(data_seq,0,setup.batch_size)
 t1 = time.time()
-loss = get_loss_sample(initial_params, data_seq[0])
+loss = get_loss_batch(initial_params, sample)
 t2 = time.time()
 
 print('\nLoss: %s' %loss, type(loss))
@@ -192,7 +194,7 @@ print('\n','-'*10,'ML Loss Function Pass','-'*10,'\n')
 # %% MC Loss
 setup.mc_flag = True
 t1 = time.time()
-loss_mc, grads_mc = value_and_grad(get_loss_sample, argnums=0, allow_int=True)(initial_params, data_seq[0])
+loss_mc, grads_mc = value_and_grad(get_loss_batch, argnums=0, allow_int=True)(initial_params, sample)
 t2 = time.time()
 
 print('\nLoss: %s' %loss, type(loss))
@@ -208,7 +210,11 @@ print('\n','-'*10,'MC Loss Function Pass','-'*10,'\n')
 loss = 0
 grads = {}
 
+t1 = time.time()
 loss, grads = cumulate(loss,loss_mc,grads,grads_mc,1)
+t2 = time.time()
+
+print('time: %s s' %(t2-t1))
 
 if loss.dtype != jnp.dtype('float64') or type(grads) != dict:
     raise "Cumulate function failed"
@@ -218,7 +224,7 @@ print('\n','-'*10,'Cumulate Function Pass','-'*10,'\n')
 # %% Test
 
 dat.data.check_sims()
-
+data_coarse = jnp.reshape(data_coarse, (1,5,setup.nt+1,setup.nx,1,1))
 t1 = time.time()
 err = evaluate_epoch(initial_params, data_coarse)
 t2 = time.time()
@@ -232,6 +238,8 @@ if err.dtype != jnp.dtype('float64') or jnp.isnan(err):
 print('\n','-'*10,'Evaluate Function Pass','-'*10,'\n')
 
 # %% Update
+sample = jnp.moveaxis(data_seq,0,1)
+sample = jnp.reshape(sample,(1,5,setup.nt-setup.ns-1,setup.ns+2,setup.nx,1,1))
 if setup.parallel_flag:
     data_batch = np.array_split(data_seq, setup.num_batches)
     n_dev = jax.local_device_count()
@@ -243,7 +251,9 @@ if setup.parallel_flag:
     params_new, opt_state_new, loss_new = update(params_par,opt_par,data_par)
     t2 = time.time()
 
+    print("Types of updated state:")
     print(type(params_new[0]),type(opt_state_new[0]),type(loss_new[0]))
+    print('time: %s s' %(t2-t1))
 
     if type(params_new[0]) != dict:
         raise "Update function failed: params error"
@@ -258,11 +268,12 @@ if setup.parallel_flag:
 
 else:
     t1 = time.time()
-    params_new, opt_state_new, loss_new = update(initial_params,initial_opt_state,jax.device_put(data_seq))
+    params_new, opt_state_new, loss_new = update(initial_params,initial_opt_state,sample)
     t2 = time.time()
 
     print("Types of updated state:")
     print(type(params_new),type(opt_state_new),type(loss_new))
+    print('time: %s s' %(t2-t1))
 
     if type(params_new) != dict:
         raise "Update function failed: params error"

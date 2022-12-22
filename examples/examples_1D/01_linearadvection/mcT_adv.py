@@ -174,13 +174,13 @@ def get_par_batch(serial):
 #         ml_networks_dict
 #     )
 
-def get_loss_sample(params: hk.Params, sample:jnp.ndarray) -> float:
+def get_loss_batch(params: hk.Params, sample:jnp.ndarray) -> float:
     """
     Uses a highly resolved simulation as ground truth to calculate loss over a sample
     
     ----- inputs -----\n
     :param params: holds parameters of the NN
-    :param sample: training data for one sample, of shape [primes, sequences, timesteps, xs(, ys, zs)]
+    :param sample: training data for one batch, of shape [sequences, primes, timesteps, xs(, ys, zs)]
 
     ----- returns -----\n
     :return loss_sample: average loss over all sequences in the sample
@@ -200,8 +200,6 @@ def get_loss_sample(params: hk.Params, sample:jnp.ndarray) -> float:
     sim_manager = SimulationManager(input_reader)
     # sim_manager = simMan.SimulationManager(input_reader)
 
-    # switch 0th axis to time for feed forward mapping
-    sample = jnp.swapaxes(sample,1,0)
     ml_primes_init = sample[:,:,0,...]
 
     # if setup.parallel_flag:
@@ -271,20 +269,6 @@ def get_loss_sample(params: hk.Params, sample:jnp.ndarray) -> float:
     # mc_loss_sample = setup.mc_alpha * mse(ml_pred_mcloss,mc_pred_arr[jnp.s_[:,-1,...]])
     # loss_sample = ml_loss_sample + mc_loss_sample
     # return loss_sample
-
-# def get_loss_batch(params: hk.Params, sample: jnp.ndarray) -> float:
-#     """
-#     vectorized version of get_loss_sample
-
-#     ----- inputs -----\n
-#     :param params: holds parameters of the NN
-#     :param sample: sequenced training data sample, of shape [primes, sequences, timesteps, xs]
-
-#     ----- returns -----\n
-#     :return loss_batch: average loss over batch
-#     """
-#     # loss_batch = 
-#     return get_loss_sample(params,sample)
 
 def _evaluate_sample(params: hk.Params, sample: jnp.ndarray) -> jnp.ndarray:
     """
@@ -409,9 +393,16 @@ def update(params: hk.Params, opt_state: optax.OptState, data: jnp.ndarray) -> T
     loss = 0
     grads = {}
     for sample in data:
-        loss_sample, grad_sample = value_and_grad(get_loss_sample, argnums=0, allow_int=True)(params, sample)
+        sample = jnp.swapaxes(sample,0,1)
+        loss_sample = 0
+        grad_sample = {}
+
+        for i in range(setup.num_batches):
+            seqs = lax.dynamic_slice_in_dim(sample,i*setup.batch_size,setup.batch_size)
+            loss_batch, grad_batch = value_and_grad(get_loss_batch, argnums=0, allow_int=True)(params, seqs)
+            loss_sample, grad_sample = cumulate(loss_sample, loss_batch, grad_sample, grad_batch, setup.num_batches)
+
         loss, grads = cumulate(loss, loss_sample, grads, grad_sample, data.shape[0])
-    
     updates, opt_state_new = optimizer.update(grads, opt_state)
     params_new = optax.apply_updates(params, updates)
 
@@ -445,24 +436,9 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
         train_seq = jnp.moveaxis(train_seq,0,2)
         del train_coarse
 
-        # batch data
-        train_batch = jnp.array_split(train_seq, setup.num_batches)
-        del train_seq
-
         t1 = time.time()
-        for batch in range(setup.num_batches):
-            # call update function
-            # if setup.parallel_flag:
-            #     n_dev = jax.local_device_count()
-            #     print('batching for %s devices' %n_dev)
-            #     train_par = np.array_split(train_batch[batch], n_dev)
-            #     params_par = jax.tree_map(lambda x: jnp.array([x] * n_dev), state.params)
-            #     opt_par = jax.tree_map(lambda x: jnp.array([x] * n_dev), state.opt_state)
-            #     params_new, opt_state_new, loss_new = update_par(params_par, opt_par, train_par)
-            #     state = TrainingState(params_new[0],opt_state_new[0],loss_new[0])
-            # else:
-            params_new, opt_state_new, loss_new = update(state.params, state.opt_state, jax.device_put(train_batch[batch]))
-            state = TrainingState(params_new,opt_state_new,loss_new)
+        params_new, opt_state_new, loss_new = update(state.params, state.opt_state, jax.device_put(train_seq))
+        state = TrainingState(params_new,opt_state_new,loss_new)
 
         # call test function
         test_err = evaluate_epoch(state.params, test_coarse)
