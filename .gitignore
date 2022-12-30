@@ -6,6 +6,7 @@ results
 results/
 network/
 test/
+memory/
 .test_cache/
 */jaxfluids.egg-info
 tensorboard/
