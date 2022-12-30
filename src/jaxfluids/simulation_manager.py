@@ -511,6 +511,27 @@ class SimulationManager:
 
         return dt
 
+    def _ff_step(self, carry, xs, args):
+        cons, primes, time = carry
+        timestep_size, levelset, volume_fraction, apertures, forcings_dictionary, ml_parameters_dict, ml_networks_dict, nhx, nhy, nhz = args
+        reinitialize = False
+
+        material_fields, levelset_quantities, _ = self.do_integration_step(
+            cons, primes, timestep_size, time, 
+            levelset, volume_fraction, apertures, reinitialize, 
+            forcings_dictionary, ml_parameters_dict, ml_networks_dict)
+
+        primes, cons = material_fields["primes"], material_fields["cons"]
+        levelset, volume_fraction, apertures = levelset_quantities["levelset"], levelset_quantities["volume_fraction"], levelset_quantities["apertures"]
+
+        time += timestep_size
+        primes_real = primes[:,nhx,nhy,nhz]
+        carry         = (cons, primes, time)
+        ys = (primes_real, time)
+
+        return carry, ys
+
+    # @partial(jax.jit, static_argnums=(0, 8))
     def _feed_forward(self, primes_init: jnp.DeviceArray, levelset_init: jnp.DeviceArray, n_steps: int, timestep_size: float, 
         t_start: float, output_freq: int = 1, ml_parameters_dict: Union[Dict, None] = None,
         ml_networks_dict: Union[Dict, None] = None) -> Tuple[jnp.DeviceArray, jnp.DeviceArray]:
@@ -586,42 +607,44 @@ class SimulationManager:
 
         forcings_dictionary = {}
 
-        current_time = t_start
-        current_step = 0
-
         # LOOP OVER STEPS
-        for step in range(n_steps):
-            if self.input_reader.levelset_type != None:
-                reinitialize = True if current_step % self.levelset_handler.interval_reinitialization == 0 else False
-            else:
-                reinitialize = False
+        # for step in range(n_steps):
+        #     if self.input_reader.levelset_type != None:
+        #         reinitialize = True if current_step % self.levelset_handler.interval_reinitialization == 0 else False
+        #     else:
+        #         reinitialize = False
 
-            material_fields, levelset_quantities, residuals = self.do_integration_step(
-                cons, primes, timestep_size, current_time, 
-                levelset, volume_fraction, apertures, reinitialize, 
-                forcings_dictionary, ml_parameters_dict, ml_networks_dict)
+        #     material_fields, levelset_quantities, residuals = self.do_integration_step(
+        #         cons, primes, timestep_size, current_time, 
+        #         levelset, volume_fraction, apertures, reinitialize, 
+        #         forcings_dictionary, ml_parameters_dict, ml_networks_dict)
 
-            primes, cons = material_fields["primes"], material_fields["cons"]
-            levelset, volume_fraction, apertures = levelset_quantities["levelset"], levelset_quantities["volume_fraction"], levelset_quantities["apertures"]
+        #     primes, cons = material_fields["primes"], material_fields["cons"]
+        #     levelset, volume_fraction, apertures = levelset_quantities["levelset"], levelset_quantities["volume_fraction"], levelset_quantities["apertures"]
 
-            current_time += timestep_size
-            current_step += 1
+        #     current_time += timestep_size
+        #     current_step += 1
 
-            # APPEND OUTPUT
-            if current_step % output_freq == 0:
-                if self.input_reader.levelset_type != None:
-                    cons_real   = self.output_writer.compute_real_buffer(cons[...,nhx,nhy,nhz], volume_fraction[nhx_,nhy_,nhz_])
-                    primes_real = self.output_writer.compute_real_buffer(primes[...,nhx,nhy,nhz], volume_fraction[nhx_,nhy_,nhz_])
-                    out         = jnp.concatenate([primes_real, jnp.expand_dims(volume_fraction[nhx_,nhy_,nhz_], axis=0)], axis = 0)
-                else:
-                    primes_real = primes[:,nhx,nhy,nhz]
-                    out         = primes_real
+        #     # APPEND OUTPUT
+        #     if current_step % output_freq == 0:
+        #         if self.input_reader.levelset_type != None:
+        #             cons_real   = self.output_writer.compute_real_buffer(cons[...,nhx,nhy,nhz], volume_fraction[nhx_,nhy_,nhz_])
+        #             primes_real = self.output_writer.compute_real_buffer(primes[...,nhx,nhy,nhz], volume_fraction[nhx_,nhy_,nhz_])
+        #             out         = jnp.concatenate([primes_real, jnp.expand_dims(volume_fraction[nhx_,nhy_,nhz_], axis=0)], axis = 0)
+        #         else:
+        #             primes_real = primes[:,nhx,nhy,nhz]
+        #             out         = primes_real
 
-                solution_list.append(out)
-                times_list.append(current_time)
+        #         solution_list.append(out)
+        #         times_list.append(current_time)
 
-        solution_array = jnp.stack(solution_list)
-        times_array    = jnp.stack(times_list)
+        ff_step = partial(self._ff_step, args=(timestep_size,levelset,volume_fraction,apertures,forcings_dictionary,ml_parameters_dict,ml_networks_dict,nhx,nhy,nhz))
+        _, out_arrays = jax.lax.scan(ff_step, (cons, primes, t_start), None, n_steps)
+        solution_array, times_array = out_arrays
+
+        solution_array = solution_array[0::output_freq]
+        times_array = times_array[0::output_freq]
+
         return solution_array, times_array
 
     def feed_forward(self, batch_primes_init: jnp.DeviceArray, batch_levelset_init: jnp.DeviceArray, n_steps: int, timestep_size: float, 
