@@ -44,9 +44,9 @@ Run JAX-Fluids to train mcTangent:
 Evaluate against validation set to get error
 Visualize results
 """
-results_path = setup.work('results')
-test_path = setup.work('test')
-param_path = setup.work("network/parameters")
+results_path = setup.proj('results')
+test_path = setup.proj('test')
+param_path = setup.proj("network/parameters")
 
 # %% create mcTangent network and training functions
 class TrainingState(NamedTuple):

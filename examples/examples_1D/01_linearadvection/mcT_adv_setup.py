@@ -7,8 +7,8 @@ import jax.random as jrand
 import jax.numpy as jnp
 from jax.config import config
 """parameters for initializing mcTangent"""
-work = functools.partial(os.path.join,'./')
-save_path = work('data')
+proj = functools.partial(os.path.join,os.environ["PROJ"])
+save_path = proj('data')
 parallel_flag = False
 
 # data only
