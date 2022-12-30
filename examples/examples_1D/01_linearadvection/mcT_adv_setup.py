@@ -15,8 +15,8 @@ parallel_flag = False
 mc_flag = False
 noise_flag = False
 
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-os.environ["XLA_FLAGS"] = "--xla_dump_to=/tmp/foo"
+# os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+# os.environ["XLA_FLAGS"] = "--xla_dump_to=/tmp/foo"
 config.update("jax_debug_nans", True)
 case_name = 'mcT_adv'
 
@@ -44,13 +44,13 @@ noise_level = 0.02 if noise_flag else 0
 
 num_epochs = int(1e4)
 learning_rate = 5e-4
-batch_size = 10
+batch_size = 5
 ns = 1
 layers = 1
 
 # sample set size
-num_train = 1
-num_test = 1
+num_train = 2
+num_test = 2
 
 # define batch by number of sequences trained on, instead of samples
 train_seqs = int(nt/2)
@@ -69,7 +69,7 @@ case_base['general']['save_dt'] = dt
 case_base['domain']['x']['cells'] = 4*nx
 case_base['domain']['x']['range'][1] = x_max
 
-seeds_to_gen = np.arange(num_batches*batch_size+num_train+1)
+seeds_to_gen = np.arange(num_test+num_train+1)
 # case_arr = np.empty(len(seeds_to_gen), dtype=object)
 
 # edit numerical setup

@@ -1,21 +1,26 @@
 from typing import Tuple, NamedTuple, Optional, Iterable, Union
 import time, os, wandb, sys
-import shutil, functools
+import shutil
+import functools
+from functools import partial
 import numpy as np
 import re
+import matplotlib.pyplot as plt
+import json
+import memray as mra
+
 import jax
 import jax.numpy as jnp
 import jax.random as jrand
 import jax.image as jim
+import jax.profiler as jprof
 from jax import value_and_grad, vmap, jit, lax, pmap
-import json
 import pickle
 import haiku as hk
 import optax
 from jaxfluids import InputReader, Initializer, SimulationManager
 import simMan
 from jaxfluids.post_process import load_data
-import matplotlib.pyplot as plt
 
 import mcT_adv_setup as setup
 import mcT_adv_data as dat
@@ -123,14 +128,14 @@ def mse(pred: jnp.ndarray, true: Optional[jnp.ndarray] = None) -> float:
         return _mse(pred)
     return _mse(pred - true)
 
-@functools.partial(jit,static_argnums=[2])
+@partial(jit,static_argnums=[2])
 def _add_noise(arr: jnp.ndarray, seed: int, noise_level: float):
     noise_arr = jrand.normal(jrand.PRNGKey(seed),arr.shape)
     noise_arr *= noise_level/jnp.max(noise_arr)
     return arr * (1+noise_arr)
 
 def add_noise(arr: jnp.ndarray, seed: int):
-    return functools.partial(_add_noise,noise_level=setup.noise_level)(arr,seed)
+    return partial(_add_noise,noise_level=setup.noise_level)(arr,seed)
 
 @jit
 def get_coarse(data_fine, seed: Optional[int] = 1) -> jnp.ndarray:
@@ -138,18 +143,15 @@ def get_coarse(data_fine, seed: Optional[int] = 1) -> jnp.ndarray:
     down samples the data by factor of 4 for use in training.
 
     ----- inputs -----\n
-    :param data_fine: data to be downsampled
+    :param data_fine: data to be downsampled, of shape [times, fxs(, fyz, fzs)]
 
     ----- returns -----\n
-    :return data_coarse: downsampled data array
+    :return data_coarse: downsampled data array, of shape [times, cxs(, cyz, czs)]
     """
-    data_coarse = jnp.zeros((5,setup.nt+1,setup.nx,1,1))
-
-    for ii, prime in enumerate(data_fine):
-        data_coarse = data_coarse.at[ii,...].set(jim.resize(prime,(setup.nt+1,setup.nx,1,1),"linear"))
-        if setup.noise_flag:
-            seed_arr = jrand.randint(jrand.PRNGKey(seed),(setup.nt+1,),1,setup.nt+1)
-            data_coarse = data_coarse.at[ii,...].set(vmap(add_noise,in_axes=(0,0))(data_coarse[ii,...],seed_arr))
+    data_coarse = jim.resize(data_fine,(setup.nt+1,setup.nx,1,1),"linear")
+    if setup.noise_flag:
+        seed_arr = jrand.randint(jrand.PRNGKey(seed),(setup.nt+1,),1,setup.nt+1)
+        data_coarse = vmap(add_noise,in_axes=(0,0))(data_coarse,seed_arr)
     
     return data_coarse
 
@@ -183,7 +185,7 @@ def get_loss_batch(params: hk.Params, sample:jnp.ndarray) -> float:
     :param sample: training data for one batch, of shape [sequences, primes, timesteps, xs(, ys, zs)]
 
     ----- returns -----\n
-    :return loss_sample: average loss over all sequences in the sample
+    :return loss_batch: average loss over all sequences in the sample
     """
     sim = dat.data.next_sim()
     # feed forward with mcTangent ns+1 steps
@@ -223,12 +225,13 @@ def get_loss_batch(params: hk.Params, sample:jnp.ndarray) -> float:
     #         get_par_batch(ml_networks_dict)
     #     )
     # else:
+    # ml_pred_arr, _ = partial(jit(sim_manager.feed_forward),static_argnums=(7))(
     ml_pred_arr, _ = sim_manager.feed_forward(
         ml_primes_init,
         jnp.empty_like(ml_primes_init), # not needed for single-phase, but is a required arg for feed_forward
         setup.ns+1,
         coarse_case['general']['save_dt'],
-        0, 1,
+        0.0, 1,
         ml_parameters_dict,
         ml_networks_dict
     )
@@ -243,9 +246,9 @@ def get_loss_batch(params: hk.Params, sample:jnp.ndarray) -> float:
     ml_pred_arr = jnp.swapaxes(ml_pred_arr,1,2)
 
     # ml loss
-    ml_loss_sample = mse(ml_pred_arr[:,:,1:,...], sample[:,:,1:,...])
+    ml_loss_batch = mse(ml_pred_arr, sample[:,:,1:,...])
 
-    return ml_loss_sample
+    return ml_loss_batch
     # if not setup.mc_flag:
     # if jnp.isnan(ml_pred_arr).any() or (ml_pred_arr<0).any():
     #     return (setup.mc_alpha*10)*ml_loss_sample
@@ -270,6 +273,7 @@ def get_loss_batch(params: hk.Params, sample:jnp.ndarray) -> float:
     # loss_sample = ml_loss_sample + mc_loss_sample
     # return loss_sample
 
+# @jit
 def _evaluate_sample(params: hk.Params, sample: jnp.ndarray) -> jnp.ndarray:
     """
     creates a simulation manager to fully simulate the case using the updated mcTangent
@@ -321,7 +325,8 @@ def _evaluate_sample(params: hk.Params, sample: jnp.ndarray) -> jnp.ndarray:
 
     return err_sample
 
-def evaluate_epoch(params: hk.Params, data: jnp.ndarray) -> float:
+# @jit
+def evaluate(params: hk.Params, data: jnp.ndarray) -> float:
     """
     looped form of _evaluate_sample
 
@@ -336,9 +341,10 @@ def evaluate_epoch(params: hk.Params, data: jnp.ndarray) -> float:
     err_epoch = 0
     for sample in data:
         err_epoch += _evaluate_sample(params,sample)/setup.num_test
+    # err_epoch = vmap(_evaluate_sample, in_axes=(None,0))(params, data)
     return err_epoch
 
-# @functools.partial(pmap, axis_name='data', in_axes=(0,0,0))
+# @partial(pmap, axis_name='data', in_axes=(0,0,0))
 # def update_par(params: hk.Params, opt_state: optax.OptState, data: jnp.ndarray) -> Tuple:
 #     """
 #     Evaluates network loss and gradients
@@ -399,7 +405,9 @@ def update(params: hk.Params, opt_state: optax.OptState, data: jnp.ndarray) -> T
 
         for i in range(setup.num_batches):
             seqs = lax.dynamic_slice_in_dim(sample,i*setup.batch_size,setup.batch_size)
-            loss_batch, grad_batch = value_and_grad(get_loss_batch, argnums=0, allow_int=True)(params, seqs)
+            loss_batch, grad_batch = value_and_grad(get_loss_batch, argnums=0)(params, seqs)
+            # loss_batch = get_loss_batch(params, seqs)
+            # grad_batch = params
             loss_sample, grad_sample = cumulate(loss_sample, loss_batch, grad_sample, grad_batch, setup.num_batches)
 
         loss, grads = cumulate(loss, loss_sample, grads, grad_sample, data.shape[0])
@@ -415,21 +423,22 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
     ----- inputs -----\n
     :param state: holds parameters of the NN and optimizer
     :param setup: holds parameters for the operation of JAX-Fluids
-    :param data_test: data for testing, vanilla numpy to keep data on CPU, of shape [samples, primes, times, xs]
-    :param data_train: data for training, vanilla numpy to keep data on CPU, of shape [samples, primes, times, xs]
+    :param data_test: data for testing, of shape [samples, primes, times, xs(, ys, zs)]
+    :param data_train: data for training, of shape [samples, primes, times, xs(, ys, zs)]
 
     ----- returns -----\n
     :return states: tuple holding the best state by least error and the end state
     """
-    min_err = 100
-    epoch_min = 1
+    min_err = sys.float_info.max
+    epoch_min = -1
     best_state = state
     for epoch in range(setup.num_epochs):
-        os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "default"
+        # os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "default"
         # reset each epoch
         state = TrainingState(state.params,state.opt_state,0)
-        train_coarse = vmap(get_coarse, in_axes=(0,None))(data_train,epoch)
-        test_coarse = vmap(get_coarse, in_axes=(0,None))(data_test,epoch)
+        
+        train_coarse = vmap(vmap(get_coarse, in_axes=(0,None)),in_axes=(0,None))(data_train,epoch)
+        test_coarse = vmap(vmap(get_coarse, in_axes=(0,None)),in_axes=(0,None))(data_test,epoch)
 
         # sequence data
         train_seq = jnp.array([train_coarse[:,:, ii:(ii+setup.ns+2), ...] for ii in range(setup.nt-setup.ns-1)])
@@ -437,11 +446,14 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
         del train_coarse
 
         t1 = time.time()
-        params_new, opt_state_new, loss_new = update(state.params, state.opt_state, jax.device_put(train_seq))
+
+        # with mra.Tracker(f"memory/memray_out{epoch}.bin"):
+        params_new, opt_state_new, loss_new = update(state.params, state.opt_state, train_seq)
         state = TrainingState(params_new,opt_state_new,loss_new)
 
         # call test function
-        test_err = evaluate_epoch(state.params, test_coarse)
+        test_err = evaluate(state.params, test_coarse)
+
         t2 = time.time()
 
         # save in case job is canceled, can resume
@@ -452,13 +464,15 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
             epoch_min = epoch
             best_state = state
 
-        if epoch % 1000 == 0:  # Print every 1000 epochs
+        if epoch % 1 == 0:  # Print every 1 epochs
             print("time {:.2e}s loss {:.2e} TE {:.2e}  TE_min {:.2e} EPmin {:d} EP {} ".format(
                     t2 - t1, state.loss, test_err, min_err, epoch_min, epoch))
         
         dat.data.check_sims()
+        jprof.save_device_memory_profile(f"memory/memory_{epoch}.prof")
         wandb.log({"Train loss": float(state.loss), "Test Error": float(test_err), 'TEST MIN': float(min_err), 'Epoch' : float(epoch)})
-        os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+        # os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+        jax.clear_backends()
 
     return best_state, state
 
@@ -466,6 +480,8 @@ net = hk.without_apply_rng(hk.transform(mcT_fn))
 optimizer = optax.adam(setup.learning_rate)
 
 if __name__ == "__main__":
+    os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+
     # data input will be mean(primes_L[0], primes_R[0]) -> [(nx+1),1,1]
     data_init = jnp.empty((1,setup.nx+1,setup.ny,setup.nz))
     initial_params = net.init(jrand.PRNGKey(1), data_init)
@@ -476,6 +492,7 @@ if __name__ == "__main__":
         else:
             del last_params
             os.system('rm {}'.format(os.path.join(param_path,'last.pkl')))
+    del data_init
 
     initial_opt_state = optimizer.init(initial_params)
 
@@ -486,6 +503,10 @@ if __name__ == "__main__":
     # transfer to CPU
     # data_test = jax.device_get(data_test)
     # data_train = jax.device_get(data_train)
+
+    # transfer to GPU
+    data_test = jax.device_put(data_test)
+    data_train = jax.device_put(data_train)
 
     best_state, end_state = Train(state, data_test, data_train)
 

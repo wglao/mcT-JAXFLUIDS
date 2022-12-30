@@ -80,6 +80,7 @@ class Data():
 
                 buffer_dictionary = initializer.initialization()
                 sim_manager.simulate(buffer_dictionary)
+        del setup.cases
     
     def _load(self, sim: Sim):
         out = np.zeros((5,setup.nt+1,setup.nx_fine,setup.ny_fine,setup.nz_fine))

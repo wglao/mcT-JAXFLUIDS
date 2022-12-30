@@ -221,12 +221,12 @@ if loss.dtype != jnp.dtype('float64') or type(grads) != dict:
 
 print('\n','-'*10,'Cumulate Function Pass','-'*10,'\n')
 
-# %% Test
+# %% Evaluate
 
 dat.data.check_sims()
 data_coarse = jnp.reshape(data_coarse, (1,5,setup.nt+1,setup.nx,1,1))
 t1 = time.time()
-err = evaluate_epoch(initial_params, data_coarse)
+err = evaluate(initial_params, data_coarse)
 t2 = time.time()
 
 print('\nError: %s' %err, type(err))
