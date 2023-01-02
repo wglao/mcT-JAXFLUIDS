@@ -24,7 +24,7 @@ c = 0.9
 u = 1.0
 
 t_max = 2.0
-nt = 200
+nt = 100
 dt = t_max/nt
 
 x_max = 2.0

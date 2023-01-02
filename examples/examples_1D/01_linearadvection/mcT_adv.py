@@ -59,7 +59,7 @@ def mcT_fn(state: jnp.ndarray) -> jnp.ndarray:
     """Dense network with 1 layer of ReLU units"""
     mcT = hk.Sequential([
         hk.Flatten(),
-        hk.Linear(5*(setup.nx + 1)), jax.nn.relu,
+        hk.Linear(setup.nx + 1), jax.nn.relu,
         hk.Linear(setup.nx + 1)
     ])
     flux = mcT(state)
@@ -464,15 +464,15 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
             epoch_min = epoch
             best_state = state
 
-        if epoch % 1 == 0:  # Print every 1 epochs
+        if epoch % 10 == 0:  # Print every 1 epochs
             print("time {:.2e}s loss {:.2e} TE {:.2e}  TE_min {:.2e} EPmin {:d} EP {} ".format(
                     t2 - t1, state.loss, test_err, min_err, epoch_min, epoch))
+            jax.clear_backends()
+            # jprof.save_device_memory_profile(f"memory/memory_{epoch}.prof") 
         
         dat.data.check_sims()
-        jprof.save_device_memory_profile(f"memory/memory_{epoch}.prof")
         wandb.log({"Train loss": float(state.loss), "Test Error": float(test_err), 'TEST MIN': float(min_err), 'Epoch' : float(epoch)})
         # os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-        jax.clear_backends()
 
     return best_state, state
 
