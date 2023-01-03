@@ -531,7 +531,7 @@ class SimulationManager:
 
     #     return carry, ys
 
-    @partial(jax.jit, static_argnums=(0, 8))
+    # @partial(jax.jit, static_argnums=(0, 2, 8))
     def _feed_forward(self, primes_init: jnp.DeviceArray, levelset_init: jnp.DeviceArray, n_steps: int, timestep_size: float, 
         t_start: float, output_freq: int = 1, ml_parameters_dict: Union[Dict, None] = None,
         ml_networks_dict: Union[Dict, None] = None) -> Tuple[jnp.DeviceArray, jnp.DeviceArray]:
@@ -611,7 +611,7 @@ class SimulationManager:
         current_step = 0
 
         # LOOP OVER STEPS
-        for step in range(n_steps):
+        for step in jnp.arange(n_steps):
             if self.input_reader.levelset_type != None:
                 reinitialize = True if current_step % self.levelset_handler.interval_reinitialization == 0 else False
             else:
@@ -642,7 +642,7 @@ class SimulationManager:
                 times_list.append(current_time)
 
         # ff_step = partial(self._ff_step, args=(timestep_size,levelset,volume_fraction,apertures,forcings_dictionary,ml_parameters_dict,ml_networks_dict,nhx,nhy,nhz))
-        # _, out_arrays = jax.lax.scan(ff_step, (cons, primes, t_start), [None]*n_steps)
+        # _, out_arrays = jax.lax.scan(ff_step, (cons, primes, t_start), None, n_steps)
         # solution_array, times_array = out_arrays
 
         # solution_array = solution_array[0::output_freq]

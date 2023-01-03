@@ -43,14 +43,14 @@ mc_alpha = 1e5 if mc_flag else 0
 noise_level = 0.02 if noise_flag else 0
 ns = 1
 
-num_epochs = int(1e4)
+num_epochs = int(100)
 learning_rate = 5e-4
 batch_size = nt-ns-1
 layers = 1
 
 # sample set size
-num_train = 2
-num_test = 2
+num_train = 3
+num_test = 3
 
 # define batch by number of sequences trained on, instead of samples
 train_seqs = int(nt/2)

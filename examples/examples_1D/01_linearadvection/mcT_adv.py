@@ -19,7 +19,6 @@ import pickle
 import haiku as hk
 import optax
 from jaxfluids import InputReader, Initializer, SimulationManager
-import simMan
 from jaxfluids.post_process import load_data
 
 import mcT_adv_setup as setup
@@ -200,53 +199,25 @@ def get_loss_batch(params: hk.Params, sample:jnp.ndarray) -> float:
 
     input_reader = InputReader(coarse_case,coarse_num)
     sim_manager = SimulationManager(input_reader)
-    # sim_manager = simMan.SimulationManager(input_reader)
 
     ml_primes_init = sample[:,:,0,...]
 
-    # if setup.parallel_flag:
-    #     # feed_forward = pmap(sim_manager.feed_forward,axis_name='data')
-    #     # ml_pred_arr, _ = feed_forward(
-    #     #     get_par_batch(ml_primes_init),
-    #     #     jnp.empty_like(get_par_batch(ml_primes_init)), # not needed for single-phase, but is a required arg for feed_forward
-    #     #     get_par_batch(setup.ns+1),
-    #     #     get_par_batch(coarse_case['general']['save_dt']),
-    #     #     get_par_batch(0), get_par_batch(1),
-    #     #     get_par_batch(ml_parameters_dict),
-    #     #     get_par_batch(ml_networks_dict)
-    #     # )
-    #     feed_forward = pmap(sim_manager.feed_forward,axis_name='data')
-    #     ml_pred_arr, _ = feed_forward(
-    #         get_par_batch(ml_primes_init),
-    #         get_par_batch(setup.ns+1),
-    #         get_par_batch(coarse_case['general']['save_dt']),
-    #         get_par_batch(0), get_par_batch(1),
-    #         get_par_batch(ml_parameters_dict),
-    #         get_par_batch(ml_networks_dict)
-    #     )
-    # else:
-    # ml_pred_arr, _ = partial(jit(sim_manager.feed_forward),static_argnums=(7))(
     ml_pred_arr, _ = sim_manager.feed_forward(
         ml_primes_init,
-        jnp.empty_like(ml_primes_init), # not needed for single-phase, but is a required arg for feed_forward
+        None, # not needed for single-phase, but is a required arg for feed_forward
         setup.ns+1,
         coarse_case['general']['save_dt'],
         0.0, 1,
         ml_parameters_dict,
         ml_networks_dict
     )
-    # ml_pred_arr, _ = sim_manager.feed_forward(
-    #     ml_primes_init,
-    #     setup.ns+1,
-    #     coarse_case['general']['save_dt'],
-    #     0, 1,
-    #     ml_parameters_dict,
-    #     ml_networks_dict
-    # )
-    ml_pred_arr = jnp.swapaxes(ml_pred_arr,1,2)
+    ml_pred_arr = jnp.array(ml_pred_arr) # default
+    ml_pred_arr = jnp.moveaxis(ml_pred_arr,0,2)
+    # ml_pred_arr = jnp.swapaxes(ml_pred_arr,1,2) # scan
 
     # ml loss
-    ml_loss_batch = mse(ml_pred_arr, sample[:,:,1:,...])
+    ml_loss_batch = mse(ml_pred_arr[:,:,1:,...], sample[:,:,1:,...]) # default
+    # ml_loss_batch = mse(ml_pred_arr, sample[:,:,1:,...]) # scan
 
     return ml_loss_batch
     # if not setup.mc_flag:
@@ -302,7 +273,6 @@ def _evaluate_sample(params: hk.Params, sample: jnp.ndarray) -> jnp.ndarray:
     input_reader = InputReader(coarse_case,coarse_num)
     initializer = Initializer(input_reader)
     sim_manager = SimulationManager(input_reader)
-    # sim_manager = simMan.SimulationManager(input_reader)
     buffer_dictionary = initializer.initialization()
     buffer_dictionary['machinelearning_modules'] = {
         'ml_parameters_dict': ml_parameters_dict,
@@ -464,7 +434,7 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
             epoch_min = epoch
             best_state = state
 
-        if epoch % 10 == 0:  # Print every 1 epochs
+        if epoch % 1 == 0:  # Print every 100 epochs
             print("time {:.2e}s loss {:.2e} TE {:.2e}  TE_min {:.2e} EPmin {:d} EP {} ".format(
                     t2 - t1, state.loss, test_err, min_err, epoch_min, epoch))
             jax.clear_backends()
@@ -514,88 +484,86 @@ if __name__ == "__main__":
     save_params(best_state.params,os.path.join(param_path,"best.pkl"))
     save_params(end_state.params,os.path.join(param_path,"end.pkl"))
 
-    # %% visualize best and end state
+    # # %% visualize best and end state
 
-    # fine
-    fine_sim = dat.data.next_sim()
+    # # fine
+    # fine_sim = dat.data.next_sim()
 
-    quantities = ['density']
-    x_fine, _, times, data_dict_fine = load_data(fine_sim.domain, quantities)
+    # quantities = ['density']
+    # x_fine, _, times, data_dict_fine = load_data(fine_sim.domain, quantities)
 
-    # coarse
-    coarse_case = fine_sim.case
-    coarse_num = fine_sim.numerical
-    coarse_case['general']['save_path'] = results_path
-    coarse_case['domain']['x']['cells'] = setup.dx
-    coarse_num['conservatives']['time_integration']['fixed_timestep'] = setup.dt
-    input_reader = InputReader(coarse_case,coarse_num)
-    initializer = Initializer(input_reader)
-    sim_manager = SimulationManager(input_reader)
-    # sim_manager = simMan.SimulationManager(input_reader)
-    buffer_dictionary = initializer.initialization()
-    sim_manager.simulate(buffer_dictionary)
+    # # coarse
+    # coarse_case = fine_sim.case
+    # coarse_num = fine_sim.numerical
+    # coarse_case['general']['save_path'] = results_path
+    # coarse_case['domain']['x']['cells'] = setup.dx
+    # coarse_num['conservatives']['time_integration']['fixed_timestep'] = setup.dt
+    # input_reader = InputReader(coarse_case,coarse_num)
+    # initializer = Initializer(input_reader)
+    # sim_manager = SimulationManager(input_reader)
+    # buffer_dictionary = initializer.initialization()
+    # sim_manager.simulate(buffer_dictionary)
 
-    path = sim_manager.output_writer.save_path_domain
-    quantities = ['density']
-    x_coarse, _, _, data_dict_coarse = load_data(path, quantities)
+    # path = sim_manager.output_writer.save_path_domain
+    # quantities = ['density']
+    # x_coarse, _, _, data_dict_coarse = load_data(path, quantities)
 
-    coarse_num['conservatives']['convective_fluxes']['riemann_solver'] = "MCTANGENT"
+    # coarse_num['conservatives']['convective_fluxes']['riemann_solver'] = "MCTANGENT"
 
-    # best state
-    params_best = load_params(os.path.join(param_path,"best.pkl"))
+    # # best state
+    # params_best = load_params(os.path.join(param_path,"best.pkl"))
 
-    ml_parameters_dict = {"riemann_solver":params_best}
-    ml_networks_dict = hk.data_structures.to_immutable_dict({"riemannsolver": net})
+    # ml_parameters_dict = {"riemann_solver":params_best}
+    # ml_networks_dict = hk.data_structures.to_immutable_dict({"riemannsolver": net})
 
-    input_reader = InputReader(coarse_case,coarse_num)
-    initializer = Initializer(input_reader)
-    sim_manager = SimulationManager(input_reader)
-    # sim_manager = simMan.SimulationManager(input_reader)
-    buffer_dictionary = initializer.initialization()
-    buffer_dictionary['machinelearning_modules'] = {
-        'ml_parameters_dict': ml_parameters_dict,
-        'ml_networks_dict': ml_networks_dict
-    }
-    sim_manager.simulate(buffer_dictionary)
+    # input_reader = InputReader(coarse_case,coarse_num)
+    # initializer = Initializer(input_reader)
+    # sim_manager = SimulationManager(input_reader)
+    # buffer_dictionary = initializer.initialization()
+    # buffer_dictionary['machinelearning_modules'] = {
+    #     'ml_parameters_dict': ml_parameters_dict,
+    #     'ml_networks_dict': ml_networks_dict
+    # }
+    # sim_manager.simulate(buffer_dictionary)
 
-    path = sim_manager.output_writer.save_path_domain
-    _, _, _, data_dict_best = load_data(path, quantities)
+    # path = sim_manager.output_writer.save_path_domain
+    # _, _, _, data_dict_best = load_data(path, quantities)
 
-    # end state
-    params_end = load_params(os.path.join(param_path,"end.pkl"))
-    ml_parameters_dict = {"riemann_solver":params_end}
-    buffer_dictionary['machinelearning_modules']['ml_parameters_dict'] = ml_parameters_dict
-    sim_manager.simulate(buffer_dictionary)
+    # # end state
+    # params_end = load_params(os.path.join(param_path,"end.pkl"))
+    # ml_parameters_dict = {"riemann_solver":params_end}
+    # buffer_dictionary['machinelearning_modules']['ml_parameters_dict'] = ml_parameters_dict
+    # sim_manager.simulate(buffer_dictionary)
 
-    path = sim_manager.output_writer.save_path_domain
-    _, _, _, data_dict_end = load_data(path, quantities)
+    # path = sim_manager.output_writer.save_path_domain
+    # _, _, _, data_dict_end = load_data(path, quantities)
 
-    data_true = data_dict_fine['density']
-    data_coarse = data_dict_coarse['density']
-    data_best = data_dict_best['density']
-    data_end = data_dict_end['density']
+    # data_true = data_dict_fine['density']
+    # data_coarse = data_dict_coarse['density']
+    # data_best = data_dict_best['density']
+    # data_end = data_dict_end['density']
 
-    n_plot = 3
-    plot_steps = np.linspace(0,setup.nt,n_plot,dtype=int)
-    plot_times = times[plot_steps]
+    # n_plot = 3
+    # plot_steps = np.linspace(0,setup.nt,n_plot,dtype=int)
+    # plot_times = times[plot_steps]
 
-    fig = plt.figure(figsize=(32,10))
-    for nn in range(n_plot):
-        ut = jnp.reshape(data_true[plot_steps[nn], :], (4*setup.nx, 1))
-        uc = jnp.reshape(data_coarse[plot_steps[nn], :], (setup.nx, 1))
-        ub = jnp.reshape(data_best[plot_steps[nn], :], (setup.nx, 1))
-        ue = jnp.reshape(data_end[plot_steps[nn], :], (setup.nx, 1))
-        ax = fig.add_subplot(1, n_plot, nn+1)
-        l1 = ax.plot(x_fine, ut, '-', linewidth=2, label='True')
-        l2 = ax.plot(x_coarse, uc, '--', linewidth=2, label='Coarse')
-        l2 = ax.plot(x_coarse, ub, '--', linewidth=2, label='Predicted')
-        l2 = ax.plot(x_coarse, ue, '--', linewidth=2, label='Predicted')
-        ax.set_aspect('auto', adjustable='box')
-        ax.set_title('t = ' + str(plot_times[nn]))
+    # fig = plt.figure(figsize=(32,10))
+    # for nn in range(n_plot):
+    #     ut = jnp.reshape(data_true[plot_steps[nn], :], (4*setup.nx, 1))
+    #     uc = jnp.reshape(data_coarse[plot_steps[nn], :], (setup.nx, 1))
+    #     ub = jnp.reshape(data_best[plot_steps[nn], :], (setup.nx, 1))
+    #     ue = jnp.reshape(data_end[plot_steps[nn], :], (setup.nx, 1))
+    #     ax = fig.add_subplot(1, n_plot, nn+1)
+    #     l1 = ax.plot(x_fine, ut, '-', linewidth=2, label='True')
+    #     l2 = ax.plot(x_coarse, uc, '--', linewidth=2, label='Coarse')
+    #     l2 = ax.plot(x_coarse, ub, '--', linewidth=2, label='Predicted')
+    #     l2 = ax.plot(x_coarse, ue, '--', linewidth=2, label='Predicted')
+    #     ax.set_aspect('auto', adjustable='box')
+    #     ax.set_title('t = ' + str(plot_times[nn]))
 
-        if nn == 0:
-            handles, labels = ax.get_legend_handles_labels()
-            fig.legend(handles, labels, loc='upper center')
+    #     if nn == 0:
+    #         handles, labels = ax.get_legend_handles_labels()
+    #         fig.legend(handles, labels, loc='upper center')
 
-    # plt.show()
-    fig.savefig(os.path.join('figs',setup.case_name+'.png'))
+    # # plt.show()
+    # fig.savefig(os.path.join('figs',setup.case_name+'.png'))
