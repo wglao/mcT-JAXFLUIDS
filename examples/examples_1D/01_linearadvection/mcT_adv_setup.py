@@ -41,11 +41,11 @@ nz_fine = nz
 
 mc_alpha = 1e5 if mc_flag else 0
 noise_level = 0.02 if noise_flag else 0
+ns = 1
 
 num_epochs = int(1e4)
 learning_rate = 5e-4
-batch_size = 5
-ns = 1
+batch_size = nt-ns-1
 layers = 1
 
 # sample set size
