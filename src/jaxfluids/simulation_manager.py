@@ -531,7 +531,7 @@ class SimulationManager:
 
     #     return carry, ys
 
-    # @partial(jax.jit, static_argnums=(0, 2, 8))
+    # @partial(jax.jit, static_argnums=(0, 8))
     def _feed_forward(self, primes_init: jnp.DeviceArray, levelset_init: jnp.DeviceArray, n_steps: int, timestep_size: float, 
         t_start: float, output_freq: int = 1, ml_parameters_dict: Union[Dict, None] = None,
         ml_networks_dict: Union[Dict, None] = None) -> Tuple[jnp.DeviceArray, jnp.DeviceArray]:

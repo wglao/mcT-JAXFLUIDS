@@ -91,16 +91,16 @@ class Data():
         return out
 
     def load_all(self):
-        data_test = np.zeros((setup.num_test,5,setup.nt+1,setup.nx_fine,setup.ny_fine,setup.nz_fine))
-        for ii in range(setup.num_test):
-            data_test[ii,...] = self._load(self.next_sim())
-
         data_train = np.zeros((setup.num_train,5,setup.nt+1,setup.nx_fine,setup.ny_fine,setup.nz_fine))
         for ii in range(setup.num_train):
             data_train[ii,...] = self._load(self.next_sim())
 
+        data_test = np.zeros((setup.num_test,5,setup.nt+1,setup.nx_fine,setup.ny_fine,setup.nz_fine))
+        for ii in range(setup.num_test):
+            data_test[ii,...] = self._load(self.next_sim())
+
         self.check_sims()
-        return data_test, data_train
+        return data_train, data_test
 
             
 

@@ -407,8 +407,8 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
         # reset each epoch
         state = TrainingState(state.params,state.opt_state,0)
         
-        train_coarse = vmap(vmap(get_coarse, in_axes=(0,None)),in_axes=(0,None))(data_train,epoch)
-        test_coarse = vmap(vmap(get_coarse, in_axes=(0,None)),in_axes=(0,None))(data_test,epoch)
+        train_coarse = jit(vmap(jit(vmap(get_coarse, in_axes=(0,None))),in_axes=(0,None)))(data_train,epoch)
+        test_coarse = jit(vmap(jit(vmap(get_coarse, in_axes=(0,None))),in_axes=(0,None)))(data_test,epoch)
 
         # sequence data
         train_seq = jnp.array([train_coarse[:,:, ii:(ii+setup.ns+2), ...] for ii in range(setup.nt-setup.ns-1)])
@@ -468,7 +468,7 @@ if __name__ == "__main__":
 
     state = TrainingState(initial_params, initial_opt_state, 0)
 
-    data_test, data_train = dat.data.load_all()
+    data_train, data_test = dat.data.load_all()
 
     # transfer to CPU
     # data_test = jax.device_get(data_test)
