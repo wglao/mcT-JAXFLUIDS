@@ -56,6 +56,8 @@ num_test = 3
 train_seqs = int(nt/2)
 num_batches = int(np.ceil(train_seqs/batch_size))
 
+# use last params
+load_last = False
 
 # edit case setup
 f = open(case_name+'.json','r')

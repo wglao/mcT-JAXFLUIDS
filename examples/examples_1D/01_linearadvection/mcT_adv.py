@@ -54,13 +54,13 @@ class TrainingState(NamedTuple):
     loss: float
 
 # dense network, layer count variable not yet implemented
-def mcT_fn(state: jnp.ndarray) -> jnp.ndarray:
+def mcT_fn(primes: jnp.ndarray, cons: jnp.ndarray) -> jnp.ndarray:
     """Dense network with 1 layer of ReLU units"""
     mcT = hk.Sequential([
-        hk.Flatten(),
-        hk.Linear(setup.nx + 1), jax.nn.relu,
-        hk.Linear(setup.nx + 1)
+        hk.Linear(10*(setup.nx + 1)), jax.nn.relu,
+        hk.Linear(5*(setup.nx + 1))
     ])
+    state = jnp.concatenate((primes,cons),axis=None)
     flux = mcT(state)
     return flux
 
@@ -102,8 +102,9 @@ def compare_params(params: hk.Params, shapes: Union[Iterable[Iterable[int]],hk.P
                 if params[layer][wb].shape != shapes[2*ii+jj]:
                     return False
             else:
-                if jnp.sum(jnp.array([i != j for i,j in zip(params[layer][wb].shape,shapes[layer][wb])])):
-                    return False
+                for i,j in zip(params[layer][wb].shape,shapes[layer][wb].shape):
+                    if i != j:
+                        return False
     return True
 
 @jit
@@ -407,8 +408,10 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
         # reset each epoch
         state = TrainingState(state.params,state.opt_state,0)
         
-        train_coarse = jit(vmap(jit(vmap(get_coarse, in_axes=(0,None))),in_axes=(0,None)))(data_train,epoch)
-        test_coarse = jit(vmap(jit(vmap(get_coarse, in_axes=(0,None))),in_axes=(0,None)))(data_test,epoch)
+        # train_coarse = jit(vmap(jit(vmap(get_coarse, in_axes=(0,None))),in_axes=(0,None)))(data_train,epoch)
+        # test_coarse = jit(vmap(jit(vmap(get_coarse, in_axes=(0,None))),in_axes=(0,None)))(data_test,epoch)
+        train_coarse = vmap(vmap(get_coarse, in_axes=(0,None)),in_axes=(0,None))(data_train,epoch)
+        test_coarse = vmap(vmap(get_coarse, in_axes=(0,None)),in_axes=(0,None))(data_test,epoch)
 
         # sequence data
         train_seq = jnp.array([train_coarse[:,:, ii:(ii+setup.ns+2), ...] for ii in range(setup.nt-setup.ns-1)])
@@ -423,6 +426,8 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
 
         # call test function
         test_err = evaluate(state.params, test_coarse)
+        if test_err == jnp.inf:
+            test_err = jnp.array(sys.float_info.max)
 
         t2 = time.time()
 
@@ -434,9 +439,11 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
             epoch_min = epoch
             best_state = state
 
-        if epoch % 1 == 0:  # Print every 100 epochs
+        if epoch % 100 == 0:  # Print every 100 epochs
             print("time {:.2e}s loss {:.2e} TE {:.2e}  TE_min {:.2e} EPmin {:d} EP {} ".format(
                     t2 - t1, state.loss, test_err, min_err, epoch_min, epoch))
+        
+        if epoch % 300 == 0:  # Clear every 300 epochs
             jax.clear_backends()
             # jprof.save_device_memory_profile(f"memory/memory_{epoch}.prof") 
         
@@ -452,16 +459,17 @@ optimizer = optax.adam(setup.learning_rate)
 if __name__ == "__main__":
     os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
-    # data input will be mean(primes_L[0], primes_R[0]) -> [(nx+1),1,1]
-    data_init = jnp.empty((1,setup.nx+1,setup.ny,setup.nz))
-    initial_params = net.init(jrand.PRNGKey(1), data_init)
-    if os.path.exists(os.path.join(param_path,'last.pkl')):
+    # data input will be (primes_L+primes_R)/2,
+    # (cons_L+cons_R)/2 -> ([5,(nx+1),ny,nz], [5,(nx+1),ny,nz])
+    data_init = jnp.zeros((5,setup.nx+1,setup.ny,setup.nz))
+    initial_params = net.init(jrand.PRNGKey(1), data_init, data_init)  # (rng, "primes", "cons")
+    if os.path.exists(os.path.join(param_path,'last.pkl')) and setup.load_last:
         last_params = load_params(param_path,'last.pkl')    
         if compare_params(last_params,initial_params):
             initial_params = last_params
         else:
-            del last_params
             os.system('rm {}'.format(os.path.join(param_path,'last.pkl')))
+        del last_params
     del data_init
 
     initial_opt_state = optimizer.init(initial_params)
@@ -528,7 +536,7 @@ if __name__ == "__main__":
 
     # path = sim_manager.output_writer.save_path_domain
     # _, _, _, data_dict_best = load_data(path, quantities)
-
+eps
     # # end state
     # params_end = load_params(os.path.join(param_path,"end.pkl"))
     # ml_parameters_dict = {"riemann_solver":params_end}

@@ -32,9 +32,11 @@
 """
 
 from typing import Callable, Dict
+from functools import partial
 
 import jax
 import jax.numpy as jnp
+from jax import jit
 
 from jaxfluids.materials.material_manager import MaterialManager
 from jaxfluids.solvers.riemann_solvers.riemann_solver import RiemannSolver
@@ -48,6 +50,7 @@ class mcTangentNN(RiemannSolver):
     def __init__(self, material_manager: MaterialManager, signal_speed: Callable) -> None:
         super().__init__(material_manager, signal_speed)
 
+    @partial(jit, static_argnums=(0, 7))
     def solve_riemann_problem_xi(self, primes_L: jnp.DeviceArray, primes_R: jnp.DeviceArray, 
         cons_L: jnp.DeviceArray, cons_R: jnp.DeviceArray, axis: int, 
         ml_parameters_dict: dict, ml_networks_dict: dict, **kwargs) -> jnp.DeviceArray:        
@@ -56,13 +59,10 @@ class mcTangentNN(RiemannSolver):
 
         assert type(net) == hk.Transformed, "Network architecture must be constructed using the Haiku Transform"
 
-        fluxes_xi = jnp.zeros_like(primes_L)
-        nx = primes_L.shape[1]
-        ny = primes_L.shape[2]
-        nz = primes_L.shape[3]
-
         # EVALUATE NEURAL NETWORK FOR TANGENT MANIFOLD
-        primes = jnp.reshape(jnp.mean(jnp.array([primes_L[0], primes_R[0]]),axis=0),(1,nx,ny,nz))
-        net_out = jnp.reshape(net.apply(params, primes),fluxes_xi.shape[1:])
-        fluxes_xi = fluxes_xi.at[0,...].set(net_out)
+        primes = (primes_L+primes_R)/2
+        cons = (cons_L+cons_R)/2
+        net_out = net.apply(params, primes, cons)
+
+        fluxes_xi = jnp.reshape(net_out,cons.shape)
         return fluxes_xi
