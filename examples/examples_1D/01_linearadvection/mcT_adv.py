@@ -536,7 +536,6 @@ if __name__ == "__main__":
 
     # path = sim_manager.output_writer.save_path_domain
     # _, _, _, data_dict_best = load_data(path, quantities)
-eps
     # # end state
     # params_end = load_params(os.path.join(param_path,"end.pkl"))
     # ml_parameters_dict = {"riemann_solver":params_end}
