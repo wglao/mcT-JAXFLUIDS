@@ -1,11 +1,23 @@
-from typing import Union, Tuple, NamedTuple
-import os, functools
+from typing import Union, Tuple, NamedTuple, Optional, Iterable
+import os, functools, sys
 import json
+import pickle
 import wandb
 import numpy as np
+import haiku as hk
+import optax
+import jax
 import jax.random as jrand
 import jax.numpy as jnp
+from jax import jit
 from jax.config import config
+
+"""debugging"""
+# os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+# os.environ["XLA_FLAGS"] = "--xla_dump_to=/tmp/foo"
+config.update("jax_debug_nans", True)
+config.update("jax_disable_jit", False)
+
 """parameters for initializing mcTangent"""
 proj = functools.partial(os.path.join,os.environ["PROJ"])
 save_path = proj('data')
@@ -15,9 +27,6 @@ parallel_flag = False
 mc_flag = False
 noise_flag = False
 
-# os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-# os.environ["XLA_FLAGS"] = "--xla_dump_to=/tmp/foo"
-config.update("jax_debug_nans", True)
 case_name = 'mcT_adv'
 
 c = 0.9
@@ -43,7 +52,7 @@ mc_alpha = 1e5 if mc_flag else 0
 noise_level = 0.02 if noise_flag else 0
 ns = 1
 
-num_epochs = int(1000)
+num_epochs = int(100)
 learning_rate = 5e-4
 batch_size = nt-ns-1
 layers = 1
@@ -130,13 +139,187 @@ def get_cases() -> Cases:
 
 cases = get_cases()
 
-# uploading wandb
-wandb.init(project="mcT-JAXFLUIDS",name=case_name)
-wandb.config.problem = case_name
-wandb.config.mc_alpha = mc_alpha
-wandb.config.learning_rate = learning_rate
-wandb.config.num_epochs = num_epochs
-wandb.config.batch_size = batch_size
-wandb.config.ns = ns
-wandb.config.layer = layers
-wandb.config.method = 'Dense_net'
+@jit
+def _mse(array: jnp.ndarray):
+    return jnp.mean(jnp.square(array))
+
+@jit
+def mse(pred: jnp.ndarray, true: Optional[jnp.ndarray] = None) -> float:
+    """
+    calculates the mean squared error between a prediction and the ground truth
+    if only one argument is provided, it is taken to be the error array (pred-true)
+
+    ----- inputs -----\n
+    :param pred: predicted state
+    :param true: true state
+
+    ----- returns -----\n
+    :return mse: mean squared error between pred and true
+    """
+    if true is None:
+        return _mse(pred)
+    return _mse(pred - true)
+
+# dense network, layer count variable not yet implemented
+def mcT_fn(primes: jnp.ndarray, cons: jnp.ndarray) -> jnp.ndarray:
+    """Dense network with 1 layer of ReLU units"""
+    mcT = hk.Sequential([
+        hk.Linear(nx+1), jax.nn.relu,
+        hk.Linear(5*(nx + 1)), jax.nn.relu  # always non-negative
+    ])
+    state = jnp.concatenate((primes,cons),axis=None)
+    flux = mcT(state)
+    return flux
+
+net = hk.without_apply_rng(hk.transform(mcT_fn))
+optimizer = optax.adam(learning_rate)
+
+def save_params(params: hk.Params, path: str, filename: Optional[str] = None) -> None:
+    # params = jax.device_get(params)
+    if filename:
+        path = os.path.join(path,filename)
+    os.makedirs(os.path.dirname(path),exist_ok=True)
+    with open(path, 'wb') as fp:
+        pickle.dump(params, fp)
+        fp.close()
+
+def load_params(path: str, filename: Optional[str] = None):
+    if filename:
+        path = os.path.join(path,filename)
+    assert os.path.exists(path), "Specified parameter file does not exist"
+    with open(path, 'rb') as fp:
+        params = pickle.load(fp)
+        fp.close()
+    return params
+
+def compare_params(params: hk.Params, shapes: Union[Iterable[Iterable[int]],hk.Params]) -> bool:
+    """
+    Compares two sets of network parameters or a parameter dict with a list of prescribed shapes
+    Returns True if the params dict has all correct shapes
+
+    ----- inputs -----\n
+    :param params: network params to be checked
+    :param shapes: baseline list of shapes or another parameter dict to compare to
+
+    ----- returns -----\n
+    :return match: True if shapes are correct
+    """
+    for ii, layer in enumerate(params):
+        for jj, wb in enumerate(params[layer]):
+            if jnp.isnan(params[layer][wb]).any():
+                return False
+            if type(shapes) == list:
+                if params[layer][wb].shape != shapes[2*ii+jj]:
+                    return False
+            else:
+                for i,j in zip(params[layer][wb].shape,shapes[layer][wb].shape):
+                    if i != j:
+                        return False
+    return True
+
+if __name__ == "__main__":
+    # uploading wandb
+    wandb.init(project="mcT-JAXFLUIDS",name="Warm Start")
+    wandb.config.problem = case_name
+    wandb.config.mc_alpha = mc_alpha
+    wandb.config.learning_rate = learning_rate
+    wandb.config.num_epochs = num_epochs
+    wandb.config.batch_size = batch_size
+    wandb.config.ns = ns
+    wandb.config.layer = layers
+    wandb.config.method = 'Dense_net'
+
+    from jaxfluids.utilities import get_fluxes_xi, get_conservatives_from_primitives
+    from jaxfluids.post_process import load_data
+    from jaxfluids import InputReader, Initializer, SimulationManager
+
+    # Create simulation
+    case_dict = cases.next()
+    case_dict['domain']['x']['cells'] = nx
+    numerical['conservatives']['time_integration']['fixed_timestep'] = dt
+    input_reader = InputReader(case_dict,numerical)
+    initializer = Initializer(input_reader)
+    sim_manager = SimulationManager(input_reader)
+    buffer_dictionary = initializer.initialization()
+    sim_manager.simulate(buffer_dictionary)
+
+    # load data
+    path = sim_manager.output_writer.save_path_domain
+    quantities = ['density','velocityX','velocityY','velocityZ','pressure']
+    _, _, _, data_dict = load_data(path, quantities)
+    primes = jnp.array([data_dict[quant] for quant in data_dict.keys()])
+    primes = jnp.swapaxes(primes,0,1)
+    pad_dims = ((0,0),(0,0),(sim_manager.domain_information.nh_conservatives,sim_manager.domain_information.nh_conservatives),(0,0),(0,0))
+    primes = jnp.pad(primes,pad_dims,constant_values=1)
+    primes_L = jnp.array(jax.vmap(
+        sim_manager.space_solver.flux_computer.flux_computer.reconstruction_stencil.reconstruct_xi,
+        in_axes=(0,None,None,None))(primes, 0, 0, dx))
+    primes_R = jnp.array(jax.vmap(
+        sim_manager.space_solver.flux_computer.flux_computer.reconstruction_stencil.reconstruct_xi,
+        in_axes=(0,None,None,None))(primes, 0, 1, dx))
+    cons_L = jnp.array(jax.vmap(get_conservatives_from_primitives, in_axes=(0,None))(primes_L,sim_manager.material_manager))
+    cons_R = jnp.array(jax.vmap(get_conservatives_from_primitives, in_axes=(0,None))(primes_R,sim_manager.material_manager))
+
+    print('\n'+'-'*5+'Warm Start'+'-'*5+'\n')
+    
+    @jit
+    def warm_true(primes,cons):
+        return jnp.array(jax.vmap(get_fluxes_xi, in_axes=(0,0,None))(primes,cons,0))
+    
+    @jit
+    def _warm_loss(params,primes,cons,truth):
+        net_out = net.apply(params,primes,cons)
+        loss = mse(net_out, truth)
+        return loss
+    
+    @jit
+    def warm_loss(params,primes,cons,truth):
+        return jnp.mean(jax.vmap(_warm_loss,in_axes=(None,0,0,0))(params,primes,cons,truth))
+
+    def warm_start(primes_L,cons_L,primes_R,cons_R,epochs):
+        # init net params
+        rho_init = 2*jnp.ones((1,nx+1,ny,nz))
+        primes_init = jnp.concatenate((rho_init,jnp.ones_like(rho_init),jnp.zeros_like(rho_init),jnp.zeros_like(rho_init),jnp.ones_like(rho_init)))
+        cons_init = jnp.concatenate((rho_init,rho_init,jnp.zeros_like(rho_init),jnp.zeros_like(rho_init),1.5*rho_init))
+        params = net.init(jrand.PRNGKey(1), primes_init, cons_init)
+        opt_state = optimizer.init(params)
+        del rho_init, primes_init, cons_init
+
+        min_err = sys.float_info.max
+        epoch_min = -1
+        for epoch in range(epochs):
+            truth_array = warm_true(primes_L,cons_L)
+            loss, grads = jax.value_and_grad(warm_loss,argnums=(0))(params,primes_L,cons_L,truth_array)
+            updates, opt_state = optimizer.update(grads, opt_state)
+            params = jit(optax.apply_updates)(params, updates)
+
+            test_truth = warm_true(primes_R,cons_R)
+            test_err = warm_loss(params,primes_R,cons_R,test_truth)
+
+            if test_err < min_err:
+                epoch_min = epoch
+                min_err = test_err
+
+            if epoch % 1000 == 0:
+                print("Loss {:.2e} TE {:.2e}  TE_min {:.2e} EPmin {:d} EP {} ".format(loss, test_err, min_err, epoch_min, epoch))
+            
+            if epoch % 4000 == 0 and epoch > 0:
+                jax.clear_backends()
+            wandb.log({"Train loss": float(loss), "Test Error": float(test_err), 'Test Min': float(min_err), 'Epoch' : float(epoch)})
+        
+        save_params(params,os.path.join(proj("network/parameters"),"warm.pkl"))
+
+    warm_epochs = 3000
+    warm_start(primes_L,cons_L,primes_R,cons_R,warm_epochs)
+    
+else:
+    # uploading wandb
+    wandb.init(project="mcT-JAXFLUIDS",name=case_name)
+    wandb.config.problem = case_name
+    wandb.config.mc_alpha = mc_alpha
+    wandb.config.learning_rate = learning_rate
+    wandb.config.num_epochs = num_epochs
+    wandb.config.batch_size = batch_size
+    wandb.config.ns = ns
+    wandb.config.layer = layers
+    wandb.config.method = 'Dense_net'

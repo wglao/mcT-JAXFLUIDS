@@ -53,80 +53,9 @@ class TrainingState(NamedTuple):
     opt_state: optax.OptState
     loss: float
 
-# dense network, layer count variable not yet implemented
-def mcT_fn(primes: jnp.ndarray, cons: jnp.ndarray) -> jnp.ndarray:
-    """Dense network with 1 layer of ReLU units"""
-    mcT = hk.Sequential([
-        hk.Linear(10*(setup.nx + 1)), jax.nn.relu,
-        hk.Linear(5*(setup.nx + 1))
-    ])
-    state = jnp.concatenate((primes,cons),axis=None)
-    flux = mcT(state)
-    return flux
+from mcT_adv_setup import save_params, load_params, compare_params, mse, net, optimizer
 
-def save_params(params: hk.Params, path: str, filename: Optional[str] = None) -> None:
-    # params = jax.device_get(params)
-    if filename:
-        path = os.path.join(path,filename)
-    os.makedirs(os.path.dirname(path),exist_ok=True)
-    with open(path, 'wb') as fp:
-        pickle.dump(params, fp)
-        fp.close()
-
-def load_params(path: str, filename: Optional[str] = None):
-    if filename:
-        path = os.path.join(path,filename)
-    assert os.path.exists(path), "Specified parameter file does not exist"
-    with open(path, 'rb') as fp:
-        params = pickle.load(fp)
-        fp.close()
-    return params
-
-def compare_params(params: hk.Params, shapes: Union[Iterable[Iterable[int]],hk.Params]) -> bool:
-    """
-    Compares two sets of network parameters or a parameter dict with a list of prescribed shapes
-    Returns True if the params dict has all correct shapes
-
-    ----- inputs -----\n
-    :param params: network params to be checked
-    :param shapes: baseline list of shapes or another parameter dict to compare to
-
-    ----- returns -----\n
-    :return match: True if shapes are correct
-    """
-    for ii, layer in enumerate(params):
-        for jj, wb in enumerate(params[layer]):
-            if jnp.isnan(params[layer][wb]).any():
-                return False
-            if type(shapes) == list:
-                if params[layer][wb].shape != shapes[2*ii+jj]:
-                    return False
-            else:
-                for i,j in zip(params[layer][wb].shape,shapes[layer][wb].shape):
-                    if i != j:
-                        return False
-    return True
-
-@jit
-def _mse(array: jnp.ndarray):
-    return jnp.mean(jnp.square(array))
-
-@jit
-def mse(pred: jnp.ndarray, true: Optional[jnp.ndarray] = None) -> float:
-    """
-    calculates the mean squared error between a prediction and the ground truth
-    if only one argument is provided, it is taken to be the error array (pred-true)
-
-    ----- inputs -----\n
-    :param pred: predicted state
-    :param true: true state
-
-    ----- returns -----\n
-    :return mse: mean squared error between pred and true
-    """
-    if true is None:
-        return _mse(pred)
-    return _mse(pred - true)
+mse = setup.mse
 
 @partial(jit,static_argnums=[2])
 def _add_noise(arr: jnp.ndarray, seed: int, noise_level: float):
@@ -294,7 +223,7 @@ def _evaluate_sample(params: hk.Params, sample: jnp.ndarray) -> jnp.ndarray:
     # clean
     os.system('rm -rf {}/*'.format(test_path))
 
-    return err_sample
+    return err_sample if not jnp.isnan(err_sample) and not jnp.isinf(err_sample) else sys.float_info.max
 
 # @jit
 def evaluate(params: hk.Params, data: jnp.ndarray) -> float:
@@ -313,7 +242,7 @@ def evaluate(params: hk.Params, data: jnp.ndarray) -> float:
     for sample in data:
         err_epoch += _evaluate_sample(params,sample)/setup.num_test
     # err_epoch = vmap(_evaluate_sample, in_axes=(None,0))(params, data)
-    return err_epoch
+    return err_epoch if not jnp.isnan(err_epoch) and not jnp.isinf(err_epoch) else sys.float_info.max
 
 # @partial(pmap, axis_name='data', in_axes=(0,0,0))
 # def update_par(params: hk.Params, opt_state: optax.OptState, data: jnp.ndarray) -> Tuple:
@@ -426,8 +355,6 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
 
         # call test function
         test_err = evaluate(state.params, test_coarse)
-        if test_err == jnp.inf:
-            test_err = jnp.array(sys.float_info.max)
 
         t2 = time.time()
 
@@ -439,13 +366,16 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
             epoch_min = epoch
             best_state = state
 
-        if epoch % 100 == 0:  # Print every 100 epochs
+        if epoch % 10 == 0:  # Print every 10 epochs
             print("time {:.2e}s loss {:.2e} TE {:.2e}  TE_min {:.2e} EPmin {:d} EP {} ".format(
                     t2 - t1, state.loss, test_err, min_err, epoch_min, epoch))
         
-        if epoch % 300 == 0:  # Clear every 300 epochs
+        if epoch == 0:  # Profile for memory monitoring
+            jprof.save_device_memory_profile(f"memory/memory_{epoch}.prof") 
+        
+        if epoch % 5 == 0:  # Clear every 5 epochs
             jax.clear_backends()
-            # jprof.save_device_memory_profile(f"memory/memory_{epoch}.prof") 
+
         
         dat.data.check_sims()
         wandb.log({"Train loss": float(state.loss), "Test Error": float(test_err), 'TEST MIN': float(min_err), 'Epoch' : float(epoch)})
@@ -453,24 +383,22 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
 
     return best_state, state
 
-net = hk.without_apply_rng(hk.transform(mcT_fn))
-optimizer = optax.adam(setup.learning_rate)
-
 if __name__ == "__main__":
     os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
-    # data input will be (primes_L+primes_R)/2,
-    # (cons_L+cons_R)/2 -> ([5,(nx+1),ny,nz], [5,(nx+1),ny,nz])
-    data_init = jnp.zeros((5,setup.nx+1,setup.ny,setup.nz))
-    initial_params = net.init(jrand.PRNGKey(1), data_init, data_init)  # (rng, "primes", "cons")
-    if os.path.exists(os.path.join(param_path,'last.pkl')) and setup.load_last:
-        last_params = load_params(param_path,'last.pkl')    
-        if compare_params(last_params,initial_params):
-            initial_params = last_params
+    # data input will be (primes_L|primes_R), (cons_L|cons_R) -> ([5,(nx+1),ny,nz], [5,(nx+1),ny,nz])
+    rho_init = 2*jnp.ones((1,setup.nx+1,setup.ny,setup.nz))
+    primes_init = jnp.concatenate((rho_init,jnp.ones_like(rho_init),jnp.zeros_like(rho_init),jnp.zeros_like(rho_init),jnp.ones_like(rho_init)))
+    cons_init = jnp.concatenate((rho_init,rho_init,jnp.zeros_like(rho_init),jnp.zeros_like(rho_init),1.5*rho_init))
+    initial_params = net.init(jrand.PRNGKey(1), primes_init, cons_init)  # (rng, "primes", "cons")
+    if os.path.exists(os.path.join(param_path,'warm.pkl')) and setup.load_last:
+        warm_params = load_params(param_path,'warm.pkl')    
+        if compare_params(warm_params,initial_params):
+            initial_params = warm_params
         else:
-            os.system('rm {}'.format(os.path.join(param_path,'last.pkl')))
-        del last_params
-    del data_init
+            os.system('rm {}'.format(os.path.join(param_path,'warm.pkl')))
+        del warm_params
+    del rho_init, primes_init, cons_init
 
     initial_opt_state = optimizer.init(initial_params)
 

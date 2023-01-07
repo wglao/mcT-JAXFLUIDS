@@ -30,7 +30,9 @@
 #*------------------------------------------------------------------------------*
 
 from typing import List
+import sys
 
+import jax
 import jax.numpy as jnp
 
 from jaxfluids.stencils.spatial_reconstruction import SpatialReconstruction
@@ -119,8 +121,11 @@ class WENO5(SpatialReconstruction):
 
         one_alpha = 1.0 / (alpha_0 + alpha_1 + alpha_2)
 
-        omega_0 = alpha_0 * one_alpha 
-        omega_1 = alpha_1 * one_alpha 
+        alpha_0 = jnp.where(jnp.isfinite(alpha_0),alpha_0,jnp.zeros_like(alpha_0))
+        one_alpha = jnp.where(jnp.isfinite(one_alpha),one_alpha,jnp.zeros_like(one_alpha))
+
+        omega_0 = alpha_0 * one_alpha
+        omega_1 = alpha_1 * one_alpha  
         omega_2 = alpha_2 * one_alpha 
 
         p_0 = self.cr_[j][0][0] * buffer[s1_[0]] + self.cr_[j][0][1] * buffer[s1_[1]] + self.cr_[j][0][2] * buffer[s1_[2]]
