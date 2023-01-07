@@ -394,6 +394,7 @@ if __name__ == "__main__":
     if os.path.exists(os.path.join(param_path,'warm.pkl')) and setup.load_last:
         warm_params = load_params(param_path,'warm.pkl')    
         if compare_params(warm_params,initial_params):
+            print("\n"+"-"*5+"Using Warm-Start Params"+"-"*5+"\n")
             initial_params = warm_params
         else:
             os.system('rm {}'.format(os.path.join(param_path,'warm.pkl')))
