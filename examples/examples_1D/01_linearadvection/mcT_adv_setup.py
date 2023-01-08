@@ -12,11 +12,12 @@ import jax.numpy as jnp
 from jax import jit
 from jax.config import config
 
-"""debugging"""
+"""debugging and config"""
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 # os.environ["XLA_FLAGS"] = "--xla_dump_to=/tmp/foo"
 config.update("jax_debug_nans", True)
 config.update("jax_disable_jit", False)
+config.update("jax_enable_x64", True)
 
 """parameters for initializing mcTangent"""
 proj = functools.partial(os.path.join,os.environ["PROJ"])
@@ -53,7 +54,7 @@ noise_level = 0.02 if noise_flag else 0
 ns = 1
 
 num_epochs = int(100)
-learning_rate = 5e-4
+learning_rate = 1e-4
 batch_size = nt-ns-1
 layers = 1
 
@@ -164,8 +165,9 @@ def mse(pred: jnp.ndarray, true: Optional[jnp.ndarray] = None) -> float:
 def mcT_fn(primes: jnp.ndarray, cons: jnp.ndarray) -> jnp.ndarray:
     """Dense network with 1 layer of ReLU units"""
     mcT = hk.Sequential([
-        hk.Linear(nx+1), jax.nn.hard_tanh,  # try different activation
-        hk.Linear(5*(nx + 1)), jax.nn.relu  # always non-negative
+        hk.Linear(nx+1), jax.nn.relu,
+        hk.Linear(nx+1), jax.nn.relu,  # try second layer
+        hk.Linear(5*(nx + 1)), jax.nn.relu  # always non-negative output
     ])
     state = jnp.concatenate((primes,cons),axis=None)
     flux = mcT(state)
@@ -314,7 +316,8 @@ if __name__ == "__main__":
 
     warm_epochs = 3001
     warm_start(primes_L,cons_L,primes_R,cons_R,warm_epochs)
-    
+    # clean up
+    os.system('rm -rf %s' %(cache_path))
 else:
     # uploading wandb
     wandb.init(project="mcT-JAXFLUIDS",name=case_name)

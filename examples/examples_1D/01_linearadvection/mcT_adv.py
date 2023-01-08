@@ -356,7 +356,7 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
         # call test function
         test_err = evaluate(state.params, test_coarse)
 
-        t2 = time.time()
+        # t2 = time.time()
 
         # save in case job is canceled, can resume
         save_params(state.params,os.path.join(param_path,'last.pkl'))
@@ -368,12 +368,12 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
 
         if epoch % 10 == 0:  # Print every 10 epochs
             print("time {:.2e}s loss {:.2e} TE {:.2e}  TE_min {:.2e} EPmin {:d} EP {} ".format(
-                    t2 - t1, state.loss, test_err, min_err, epoch_min, epoch))
+                    time.time() - t1, state.loss, test_err, min_err, epoch_min, epoch))
         
         if epoch == 0:  # Profile for memory monitoring
             jprof.save_device_memory_profile(f"memory/memory_{epoch}.prof") 
         
-        if epoch % 5 == 0 and epoch > 0:  # Clear every 5 epochs
+        if epoch % 10 == 0 and epoch > 0:  # Clear every 10 epochs
             jax.clear_backends()
 
         
