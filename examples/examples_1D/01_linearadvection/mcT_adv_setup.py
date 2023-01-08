@@ -13,7 +13,7 @@ from jax import jit
 from jax.config import config
 
 """debugging"""
-# os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 # os.environ["XLA_FLAGS"] = "--xla_dump_to=/tmp/foo"
 config.update("jax_debug_nans", True)
 config.update("jax_disable_jit", False)
@@ -164,7 +164,7 @@ def mse(pred: jnp.ndarray, true: Optional[jnp.ndarray] = None) -> float:
 def mcT_fn(primes: jnp.ndarray, cons: jnp.ndarray) -> jnp.ndarray:
     """Dense network with 1 layer of ReLU units"""
     mcT = hk.Sequential([
-        hk.Linear(nx+1), jax.nn.relu,
+        hk.Linear(nx+1), jax.nn.hard_tanh,  # try different activation
         hk.Linear(5*(nx + 1)), jax.nn.relu  # always non-negative
     ])
     state = jnp.concatenate((primes,cons),axis=None)
@@ -232,9 +232,12 @@ if __name__ == "__main__":
     from jaxfluids.utilities import get_fluxes_xi, get_conservatives_from_primitives
     from jaxfluids.post_process import load_data
     from jaxfluids import InputReader, Initializer, SimulationManager
+    
+    cache_path = '.test_cache'
 
     # Create simulation
     case_dict = cases.next()
+    case_dict['general']['save_path'] = cache_path
     case_dict['domain']['x']['cells'] = nx
     numerical['conservatives']['time_integration']['fixed_timestep'] = dt
     input_reader = InputReader(case_dict,numerical)
@@ -309,7 +312,7 @@ if __name__ == "__main__":
         
         save_params(params,os.path.join(proj("network/parameters"),"warm.pkl"))
 
-    warm_epochs = 3000
+    warm_epochs = 3001
     warm_start(primes_L,cons_L,primes_R,cons_R,warm_epochs)
     
 else:

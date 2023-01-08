@@ -373,7 +373,7 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
         if epoch == 0:  # Profile for memory monitoring
             jprof.save_device_memory_profile(f"memory/memory_{epoch}.prof") 
         
-        if epoch % 5 == 0:  # Clear every 5 epochs
+        if epoch % 5 == 0 and epoch > 0:  # Clear every 5 epochs
             jax.clear_backends()
 
         
@@ -383,15 +383,16 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
 
     return best_state, state
 
+# %% main
 if __name__ == "__main__":
-    os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+    # os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
     # data input will be (primes_L|primes_R), (cons_L|cons_R) -> ([5,(nx+1),ny,nz], [5,(nx+1),ny,nz])
     rho_init = 2*jnp.ones((1,setup.nx+1,setup.ny,setup.nz))
     primes_init = jnp.concatenate((rho_init,jnp.ones_like(rho_init),jnp.zeros_like(rho_init),jnp.zeros_like(rho_init),jnp.ones_like(rho_init)))
     cons_init = jnp.concatenate((rho_init,rho_init,jnp.zeros_like(rho_init),jnp.zeros_like(rho_init),1.5*rho_init))
     initial_params = net.init(jrand.PRNGKey(1), primes_init, cons_init)  # (rng, "primes", "cons")
-    if os.path.exists(os.path.join(param_path,'warm.pkl')) and setup.load_last:
+    if os.path.exists(os.path.join(param_path,'warm.pkl')) and setup.load_warm:
         warm_params = load_params(param_path,'warm.pkl')    
         if compare_params(warm_params,initial_params):
             print("\n"+"-"*5+"Using Warm-Start Params"+"-"*5+"\n")
