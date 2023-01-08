@@ -165,9 +165,9 @@ def mse(pred: jnp.ndarray, true: Optional[jnp.ndarray] = None) -> float:
 def mcT_fn(primes: jnp.ndarray, cons: jnp.ndarray) -> jnp.ndarray:
     """Dense network with 1 layer of ReLU units"""
     mcT = hk.Sequential([
-        hk.Linear(nx+1), jax.nn.relu,
-        hk.Linear(nx+1), jax.nn.relu,  # try second layer
-        hk.Linear(5*(nx + 1)), jax.nn.relu  # always non-negative output
+        hk.Linear(nx+1), jax.nn.relu6,
+        hk.Linear(nx+1), jax.nn.relu6,  # try second layer
+        hk.Linear(5*(nx + 1)), jax.nn.elu  # always positive output
     ])
     state = jnp.concatenate((primes,cons),axis=None)
     flux = mcT(state)
