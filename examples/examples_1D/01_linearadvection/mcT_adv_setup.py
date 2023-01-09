@@ -63,7 +63,7 @@ num_train = 10
 num_test = 10
 
 # define batch by number of sequences trained on, instead of samples
-train_seqs = int(nt/2)
+train_seqs = int(nt-ns-1)
 num_batches = int(np.ceil(train_seqs/batch_size))
 
 # use warm params
@@ -165,8 +165,8 @@ def mse(pred: jnp.ndarray, true: Optional[jnp.ndarray] = None) -> float:
 def mcT_fn(primes: jnp.ndarray, cons: jnp.ndarray) -> jnp.ndarray:
     """Dense network with 1 layer of ReLU units"""
     mcT = hk.Sequential([
-        hk.Linear(nx+1), jax.nn.relu6,
-        hk.Linear(nx+1), jax.nn.relu6,  # try second layer
+        hk.Linear(32), jax.nn.relu,
+        hk.Linear(32), jax.nn.relu,  # try second layer
         hk.Linear(5*(nx + 1))
     ])
     state = jnp.concatenate((primes,cons),axis=None)
@@ -232,6 +232,7 @@ if __name__ == "__main__":
     wandb.config.method = 'Dense_net'
 
     from jaxfluids.utilities import get_fluxes_xi, get_conservatives_from_primitives
+    from jaxfluids.solvers.riemann_solvers.HLLC import HLLC
     from jaxfluids.solvers.riemann_solvers.Rusanov import Rusanov
     from jaxfluids.solvers.riemann_solvers.signal_speeds import signal_speed_Einfeldt
     from jaxfluids.post_process import load_data
@@ -300,9 +301,10 @@ if __name__ == "__main__":
 
             # learn
             # truth_array = warm_true(primes_L,cons_L)
-            model = Rusanov(sim_manager.material_manager,signal_speed_Einfeldt)
+            model = HLLC(sim_manager.material_manager,signal_speed_Einfeldt)
+            # model = Rusanov(sim_manager.material_manager,signal_speed_Einfeldt)
             warm_true = jax.vmap(model.solve_riemann_problem_xi, in_axes=(0,0,0,0,None))
-            truth_array = warm_true(primes_L,primes_R,cons_L,cons_R,0)
+            truth_array = jnp.array(warm_true(primes_L,primes_R,cons_L,cons_R,0))
             loss, grads = jax.value_and_grad(warm_loss,argnums=(0))(params,primes_L,primes_R,cons_L,cons_R,truth_array)
             updates, opt_state = jit(optimizer.update)(grads, opt_state)
             params = jit(optax.apply_updates)(params, updates)
