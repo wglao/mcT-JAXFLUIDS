@@ -162,14 +162,14 @@ def mse(pred: jnp.ndarray, true: Optional[jnp.ndarray] = None) -> float:
     return _mse(pred - true)
 
 # dense network, layer count variable not yet implemented
-def mcT_fn(primes: jnp.ndarray, cons: jnp.ndarray) -> jnp.ndarray:
+def mcT_fn(primes_L: jnp.ndarray, primes_R: jnp.ndarray, cons_L: jnp.ndarray, cons_R: jnp.ndarray) -> jnp.ndarray:
     """Dense network with 1 layer of ReLU units"""
     mcT = hk.Sequential([
         hk.Linear(32), jax.nn.relu,
         hk.Linear(32), jax.nn.relu,  # try second layer
         hk.Linear(5*(nx + 1))
     ])
-    state = jnp.concatenate((primes,cons),axis=None)
+    state = jnp.concatenate((primes_L,primes_R,cons_L,cons_R),axis=None)
     flux = mcT(state)
     return flux
 
@@ -248,9 +248,8 @@ if __name__ == "__main__":
     
     @jit
     def warm_loss(params,primes_L,primes_R,cons_L,cons_R,truth):
-        net_L = jax.vmap(net.apply, in_axes=(None,primes_L,cons_L))
-        net_R = jax.vmap(net.apply, in_axes=(None,primes_R,cons_R))
-        loss = mse(0.5 * (net_L + net_R),truth)
+        net_out = jnp.array(jax.vmap(net.apply, in_axes=(None,0,0,0,0))(params,primes_L,primes_R,cons_L,cons_R))
+        loss = mse(net_out,truth)
         return loss
 
     def warm_load(sim: dat.Sim, sim_manager: SimulationManager, epoch: int):
@@ -273,10 +272,10 @@ if __name__ == "__main__":
 
     def warm_start(epochs):
         # init net params
-        rho_init = 2*jnp.ones((1,nx+1,ny,nz))
+        rho_init = jnp.ones((1,nx+1,ny,nz))
         primes_init = jnp.concatenate((rho_init,jnp.ones_like(rho_init),jnp.zeros_like(rho_init),jnp.zeros_like(rho_init),jnp.ones_like(rho_init)))
         cons_init = jnp.concatenate((rho_init,rho_init,jnp.zeros_like(rho_init),jnp.zeros_like(rho_init),1.5*rho_init))
-        params = net.init(jrand.PRNGKey(1), primes_init, cons_init)
+        params = net.init(jrand.PRNGKey(epochs), primes_init, primes_init, cons_init, cons_init)
         opt_state = optimizer.init(params)
         del rho_init, primes_init, cons_init
 
