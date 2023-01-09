@@ -245,19 +245,12 @@ if __name__ == "__main__":
 
     print('\n'+'-'*5+'Warm Start'+'-'*5+'\n')
     
-    # @jit
-    # def warm_true(primes,cons):
-    #     return jnp.array(jax.vmap(get_fluxes_xi, in_axes=(0,0,None))(primes,cons,0))
-    
     @jit
-    def _warm_loss(params,primes,cons,truth):
-        net_out = net.apply(params,primes,cons)
-        loss = mse(net_out, truth)
+    def warm_loss(params,primes_L,primes_R,cons_L,cons_R,truth):
+        net_L = jax.vmap(net.apply, in_axes=(None,primes_L,cons_L))
+        net_R = jax.vmap(net.apply, in_axes=(None,primes_R,cons_R))
+        loss = mse(0.5 * (net_L + net_R),truth)
         return loss
-    
-    @jit
-    def warm_loss(params,primes,cons,truth):
-        return jnp.mean(jax.vmap(_warm_loss,in_axes=(None,0,0,0))(params,primes,cons,truth))
 
     def warm_load(sim: dat.Sim, sim_manager: SimulationManager, epoch: int):
         primes = jax.device_put(sim.load()[3])
@@ -310,7 +303,7 @@ if __name__ == "__main__":
             model = Rusanov(sim_manager.material_manager,signal_speed_Einfeldt)
             warm_true = jax.vmap(model.solve_riemann_problem_xi, in_axes=(0,0,0,0,None))
             truth_array = warm_true(primes_L,primes_R,cons_L,cons_R,0)
-            loss, grads = jax.value_and_grad(warm_loss,argnums=(0))(params,primes_L,cons_L,truth_array)
+            loss, grads = jax.value_and_grad(warm_loss,argnums=(0))(params,primes_L,primes_R,cons_L,cons_R,truth_array)
             updates, opt_state = jit(optimizer.update)(grads, opt_state)
             params = jit(optax.apply_updates)(params, updates)
             
