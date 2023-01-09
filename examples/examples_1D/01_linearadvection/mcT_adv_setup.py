@@ -236,34 +236,7 @@ if __name__ == "__main__":
     from jaxfluids import InputReader, Initializer, SimulationManager
     
     cache_path = '.test_cache'
-
-    # Create simulation
-    case_dict = cases.next()
-    case_dict['general']['save_path'] = cache_path
-    case_dict['domain']['x']['cells'] = nx
-    numerical['conservatives']['time_integration']['fixed_timestep'] = dt
-    input_reader = InputReader(case_dict,numerical)
-    initializer = Initializer(input_reader)
-    sim_manager = SimulationManager(input_reader)
-    buffer_dictionary = initializer.initialization()
-    sim_manager.simulate(buffer_dictionary)
-
-    # load data
-    path = sim_manager.output_writer.save_path_domain
-    quantities = ['density','velocityX','velocityY','velocityZ','pressure']
-    _, _, _, data_dict = load_data(path, quantities)
-    primes = jnp.array([data_dict[quant] for quant in data_dict.keys()])
-    primes = jnp.swapaxes(primes,0,1)
-    pad_dims = ((0,0),(0,0),(sim_manager.domain_information.nh_conservatives,sim_manager.domain_information.nh_conservatives),(0,0),(0,0))
-    primes = jnp.pad(primes,pad_dims,constant_values=1)
-    primes_L = jnp.array(jax.vmap(
-        sim_manager.space_solver.flux_computer.flux_computer.reconstruction_stencil.reconstruct_xi,
-        in_axes=(0,None,None,None))(primes, 0, 0, dx))
-    primes_R = jnp.array(jax.vmap(
-        sim_manager.space_solver.flux_computer.flux_computer.reconstruction_stencil.reconstruct_xi,
-        in_axes=(0,None,None,None))(primes, 0, 1, dx))
-    cons_L = jnp.array(jax.vmap(get_conservatives_from_primitives, in_axes=(0,None))(primes_L,sim_manager.material_manager))
-    cons_R = jnp.array(jax.vmap(get_conservatives_from_primitives, in_axes=(0,None))(primes_R,sim_manager.material_manager))
+    optimizer = optax.adam(1e-5)
 
     print('\n'+'-'*5+'Warm Start'+'-'*5+'\n')
     
@@ -281,7 +254,7 @@ if __name__ == "__main__":
     def warm_loss(params,primes,cons,truth):
         return jnp.mean(jax.vmap(_warm_loss,in_axes=(None,0,0,0))(params,primes,cons,truth))
 
-    def warm_start(primes_L,cons_L,primes_R,cons_R,epochs):
+    def warm_start(epochs):
         # init net params
         rho_init = 2*jnp.ones((1,nx+1,ny,nz))
         primes_init = jnp.concatenate((rho_init,jnp.ones_like(rho_init),jnp.zeros_like(rho_init),jnp.zeros_like(rho_init),jnp.ones_like(rho_init)))
@@ -293,6 +266,38 @@ if __name__ == "__main__":
         min_err = sys.float_info.max
         epoch_min = -1
         for epoch in range(epochs):
+            # Create simulation
+            if epoch % seeds_to_gen.size == 0:
+                cases = get_cases()
+            case_dict = cases.next()
+
+            case_dict['general']['save_path'] = cache_path
+            case_dict['domain']['x']['cells'] = nx
+            numerical['conservatives']['time_integration']['fixed_timestep'] = dt
+            input_reader = InputReader(case_dict,numerical)
+            initializer = Initializer(input_reader)
+            sim_manager = SimulationManager(input_reader)
+            buffer_dictionary = initializer.initialization()
+            sim_manager.simulate(buffer_dictionary)
+
+            # load data
+            path = sim_manager.output_writer.save_path_domain
+            quantities = ['density','velocityX','velocityY','velocityZ','pressure']
+            _, _, _, data_dict = load_data(path, quantities)
+            primes = jnp.array([data_dict[quant] for quant in data_dict.keys()])
+            primes = jnp.swapaxes(primes,0,1)
+            pad_dims = ((0,0),(0,0),(sim_manager.domain_information.nh_conservatives,sim_manager.domain_information.nh_conservatives),(0,0),(0,0))
+            primes = jnp.pad(primes,pad_dims,constant_values=1)
+            primes_L = jnp.array(jax.vmap(
+                sim_manager.space_solver.flux_computer.flux_computer.reconstruction_stencil.reconstruct_xi,
+                in_axes=(0,None,None,None))(primes, 0, 0, dx))
+            primes_R = jnp.array(jax.vmap(
+                sim_manager.space_solver.flux_computer.flux_computer.reconstruction_stencil.reconstruct_xi,
+                in_axes=(0,None,None,None))(primes, 0, 1, dx))
+            cons_L = jnp.array(jax.vmap(get_conservatives_from_primitives, in_axes=(0,None))(primes_L,sim_manager.material_manager))
+            cons_R = jnp.array(jax.vmap(get_conservatives_from_primitives, in_axes=(0,None))(primes_R,sim_manager.material_manager))
+
+            # learn
             truth_array = warm_true(primes_L,cons_L)
             loss, grads = jax.value_and_grad(warm_loss,argnums=(0))(params,primes_L,cons_L,truth_array)
             updates, opt_state = optimizer.update(grads, opt_state)
@@ -311,13 +316,13 @@ if __name__ == "__main__":
             if epoch % 4000 == 0 and epoch > 0:
                 jax.clear_backends()
             wandb.log({"Train loss": float(loss), "Test Error": float(test_err), 'Test Min': float(min_err), 'Epoch' : float(epoch)})
+            # clean up
+            os.system('rm -rf %s' %(cache_path))
         
         save_params(params,os.path.join(proj("network/parameters"),"warm.pkl"))
 
     warm_epochs = 3001
-    warm_start(primes_L,cons_L,primes_R,cons_R,warm_epochs)
-    # clean up
-    os.system('rm -rf %s' %(cache_path))
+    warm_start(warm_epochs)
 else:
     # uploading wandb
     wandb.init(project="mcT-JAXFLUIDS",name=case_name)

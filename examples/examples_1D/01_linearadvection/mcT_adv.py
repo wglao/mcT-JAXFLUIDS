@@ -391,7 +391,7 @@ if __name__ == "__main__":
     rho_init = 2*jnp.ones((1,setup.nx+1,setup.ny,setup.nz))
     primes_init = jnp.concatenate((rho_init,jnp.ones_like(rho_init),jnp.zeros_like(rho_init),jnp.zeros_like(rho_init),jnp.ones_like(rho_init)))
     cons_init = jnp.concatenate((rho_init,rho_init,jnp.zeros_like(rho_init),jnp.zeros_like(rho_init),1.5*rho_init))
-    initial_params = net.init(jrand.PRNGKey(1), primes_init, cons_init)  # (rng, "primes", "cons")
+    initial_params = net.init(jrand.PRNGKey(setup.num_epochs), primes_init, cons_init)  # (rng, "primes", "cons")
     if os.path.exists(os.path.join(param_path,'warm.pkl')) and setup.load_warm:
         warm_params = load_params(param_path,'warm.pkl')    
         if compare_params(warm_params,initial_params):
