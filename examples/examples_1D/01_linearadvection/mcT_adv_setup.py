@@ -26,7 +26,7 @@ parallel_flag = False
 
 # data only
 mc_flag = False
-noise_flag = False
+noise_flag = True
 
 case_name = 'mcT_adv'
 
