@@ -59,8 +59,8 @@ batch_size = nt-ns-1
 layers = 1
 
 # sample set size
-num_train = 3
-num_test = 3
+num_train = 10
+num_test = 10
 
 # define batch by number of sequences trained on, instead of samples
 train_seqs = int(nt/2)
@@ -167,7 +167,7 @@ def mcT_fn(primes: jnp.ndarray, cons: jnp.ndarray) -> jnp.ndarray:
     mcT = hk.Sequential([
         hk.Linear(nx+1), jax.nn.relu6,
         hk.Linear(nx+1), jax.nn.relu6,  # try second layer
-        hk.Linear(5*(nx + 1)), jax.nn.elu  # always positive output
+        hk.Linear(5*(nx + 1))
     ])
     state = jnp.concatenate((primes,cons),axis=None)
     flux = mcT(state)
@@ -232,17 +232,22 @@ if __name__ == "__main__":
     wandb.config.method = 'Dense_net'
 
     from jaxfluids.utilities import get_fluxes_xi, get_conservatives_from_primitives
+    from jaxfluids.solvers.riemann_solvers.Rusanov import Rusanov
+    from jaxfluids.solvers.riemann_solvers.signal_speeds import signal_speed_Einfeldt
     from jaxfluids.post_process import load_data
     from jaxfluids import InputReader, Initializer, SimulationManager
+
+    import mcT_adv_data as dat
+    from mcT_adv import get_coarse
     
     cache_path = '.test_cache'
     optimizer = optax.adam(1e-5)
 
     print('\n'+'-'*5+'Warm Start'+'-'*5+'\n')
     
-    @jit
-    def warm_true(primes,cons):
-        return jnp.array(jax.vmap(get_fluxes_xi, in_axes=(0,0,None))(primes,cons,0))
+    # @jit
+    # def warm_true(primes,cons):
+    #     return jnp.array(jax.vmap(get_fluxes_xi, in_axes=(0,0,None))(primes,cons,0))
     
     @jit
     def _warm_loss(params,primes,cons,truth):
@@ -253,6 +258,24 @@ if __name__ == "__main__":
     @jit
     def warm_loss(params,primes,cons,truth):
         return jnp.mean(jax.vmap(_warm_loss,in_axes=(None,0,0,0))(params,primes,cons,truth))
+
+    def warm_load(sim: dat.Sim, sim_manager: SimulationManager, epoch: int):
+        primes = jax.device_put(sim.load()[3])
+        primes = jax.vmap(get_coarse, in_axes=(0,None))(primes,epoch)
+        primes = jnp.swapaxes(primes,0,1)
+        nh = numerical['conservatives']['halo_cells']
+        pad_dims = ((0,0),(0,0),(nh,nh),(0,0),(0,0))
+        primes = jnp.pad(primes,pad_dims,constant_values=1)
+        primes_L = jnp.array(jax.vmap(
+            sim_manager.space_solver.flux_computer.flux_computer.reconstruction_stencil.reconstruct_xi,
+            in_axes=(0,None,None,None))(primes, 0, 0, dx))
+        primes_R = jnp.array(jax.vmap(
+            sim_manager.space_solver.flux_computer.flux_computer.reconstruction_stencil.reconstruct_xi,
+            in_axes=(0,None,None,None))(primes, 0, 1, dx))
+        cons_L = jnp.array(jax.vmap(get_conservatives_from_primitives, in_axes=(0,None))(primes_L,sim_manager.material_manager))
+        cons_R = jnp.array(jax.vmap(get_conservatives_from_primitives, in_axes=(0,None))(primes_R,sim_manager.material_manager))
+
+        return primes_L,primes_R,cons_L,cons_R
 
     def warm_start(epochs):
         # init net params
@@ -266,44 +289,35 @@ if __name__ == "__main__":
         min_err = sys.float_info.max
         epoch_min = -1
         for epoch in range(epochs):
-            # Create simulation
-            if epoch % seeds_to_gen.size == 0:
-                cases = get_cases()
-            case_dict = cases.next()
+            dat.data.check_sims()
+            sim = dat.data.next_sim()
+            case_dict = sim.case
+            numerical = sim.numerical
 
             case_dict['general']['save_path'] = cache_path
             case_dict['domain']['x']['cells'] = nx
             numerical['conservatives']['time_integration']['fixed_timestep'] = dt
+
             input_reader = InputReader(case_dict,numerical)
             initializer = Initializer(input_reader)
             sim_manager = SimulationManager(input_reader)
-            buffer_dictionary = initializer.initialization()
-            sim_manager.simulate(buffer_dictionary)
 
             # load data
-            path = sim_manager.output_writer.save_path_domain
-            quantities = ['density','velocityX','velocityY','velocityZ','pressure']
-            _, _, _, data_dict = load_data(path, quantities)
-            primes = jnp.array([data_dict[quant] for quant in data_dict.keys()])
-            primes = jnp.swapaxes(primes,0,1)
-            pad_dims = ((0,0),(0,0),(sim_manager.domain_information.nh_conservatives,sim_manager.domain_information.nh_conservatives),(0,0),(0,0))
-            primes = jnp.pad(primes,pad_dims,constant_values=1)
-            primes_L = jnp.array(jax.vmap(
-                sim_manager.space_solver.flux_computer.flux_computer.reconstruction_stencil.reconstruct_xi,
-                in_axes=(0,None,None,None))(primes, 0, 0, dx))
-            primes_R = jnp.array(jax.vmap(
-                sim_manager.space_solver.flux_computer.flux_computer.reconstruction_stencil.reconstruct_xi,
-                in_axes=(0,None,None,None))(primes, 0, 1, dx))
-            cons_L = jnp.array(jax.vmap(get_conservatives_from_primitives, in_axes=(0,None))(primes_L,sim_manager.material_manager))
-            cons_R = jnp.array(jax.vmap(get_conservatives_from_primitives, in_axes=(0,None))(primes_R,sim_manager.material_manager))
+            primes_L,primes_R,cons_L,cons_R = warm_load(sim,sim_manager,epoch)
 
             # learn
-            truth_array = warm_true(primes_L,cons_L)
+            # truth_array = warm_true(primes_L,cons_L)
+            model = Rusanov(sim_manager.material_manager,signal_speed_Einfeldt)
+            warm_true = jax.vmap(model.solve_riemann_problem_xi, in_axes=(0,0,0,0,None))
+            truth_array = warm_true(primes_L,primes_R,cons_L,cons_R,0)
             loss, grads = jax.value_and_grad(warm_loss,argnums=(0))(params,primes_L,cons_L,truth_array)
-            updates, opt_state = optimizer.update(grads, opt_state)
+            updates, opt_state = jit(optimizer.update)(grads, opt_state)
             params = jit(optax.apply_updates)(params, updates)
-
-            test_truth = warm_true(primes_R,cons_R)
+            
+            # test
+            sim = dat.data.next_sim()
+            primes_L,primes_R,cons_L,cons_R = warm_load(sim,sim_manager,epoch)
+            test_truth = warm_true(primes_L,primes_R,cons_L,cons_R,0)
             test_err = warm_loss(params,primes_R,cons_R,test_truth)
 
             if test_err < min_err:
@@ -321,7 +335,7 @@ if __name__ == "__main__":
         
         save_params(params,os.path.join(proj("network/parameters"),"warm.pkl"))
 
-    warm_epochs = 3001
+    warm_epochs = 5001
     warm_start(warm_epochs)
 else:
     # uploading wandb

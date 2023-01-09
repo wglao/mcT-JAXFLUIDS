@@ -67,12 +67,13 @@ def add_noise(arr: jnp.ndarray, seed: int):
     return partial(_add_noise,noise_level=setup.noise_level)(arr,seed)
 
 @jit
-def get_coarse(data_fine, seed: Optional[int] = 1) -> jnp.ndarray:
+def get_coarse(data_fine: jnp.ndarray, seed: Optional[int] = 1) -> jnp.ndarray:
     """
     down samples the data by factor of 4 for use in training.
 
     ----- inputs -----\n
     :param data_fine: data to be downsampled, of shape [times, fxs(, fyz, fzs)]
+    :param seed: Optional, defines the rng if noise is added
 
     ----- returns -----\n
     :return data_coarse: downsampled data array, of shape [times, cxs(, cyz, czs)]
@@ -311,8 +312,8 @@ def update(params: hk.Params, opt_state: optax.OptState, data: jnp.ndarray) -> T
             loss_sample, grad_sample = cumulate(loss_sample, loss_batch, grad_sample, grad_batch, setup.num_batches)
 
         loss, grads = cumulate(loss, loss_sample, grads, grad_sample, data.shape[0])
-    updates, opt_state_new = optimizer.update(grads, opt_state)
-    params_new = optax.apply_updates(params, updates)
+    updates, opt_state_new = jit(optimizer.update)(grads, opt_state)
+    params_new = jit(optax.apply_updates)(params, updates)
 
     return params_new, opt_state_new, loss
 
