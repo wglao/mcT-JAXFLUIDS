@@ -242,14 +242,14 @@ if __name__ == "__main__":
     from mcT_adv import get_coarse
     
     cache_path = '.test_cache'
-    optimizer = optax.adam(1e-5)
+    optimizer = optax.adam(1e-3)
 
     print('\n'+'-'*5+'Warm Start'+'-'*5+'\n')
     
-    @jit
     def warm_loss(params,primes_L,primes_R,cons_L,cons_R,truth):
         net_out = jnp.array(jax.vmap(net.apply, in_axes=(None,0,0,0,0))(params,primes_L,primes_R,cons_L,cons_R))
-        loss = mse(net_out,truth)
+        net_fluxes = jnp.reshape(net_out,truth.shape)
+        loss = mse(net_fluxes,truth)
         return loss
 
     def warm_load(sim: dat.Sim, sim_manager: SimulationManager, epoch: int):
@@ -304,7 +304,7 @@ if __name__ == "__main__":
             # model = Rusanov(sim_manager.material_manager,signal_speed_Einfeldt)
             warm_true = jax.vmap(model.solve_riemann_problem_xi, in_axes=(0,0,0,0,None))
             truth_array = jnp.array(warm_true(primes_L,primes_R,cons_L,cons_R,0))
-            loss, grads = jax.value_and_grad(warm_loss,argnums=(0))(params,primes_L,primes_R,cons_L,cons_R,truth_array)
+            loss, grads = jax.value_and_grad(jit(warm_loss),argnums=(0))(params,primes_L,primes_R,cons_L,cons_R,truth_array)
             updates, opt_state = jit(optimizer.update)(grads, opt_state)
             params = jit(optax.apply_updates)(params, updates)
             
@@ -312,13 +312,13 @@ if __name__ == "__main__":
             sim = dat.data.next_sim()
             primes_L,primes_R,cons_L,cons_R = warm_load(sim,sim_manager,epoch)
             test_truth = warm_true(primes_L,primes_R,cons_L,cons_R,0)
-            test_err = warm_loss(params,primes_R,cons_R,test_truth)
+            test_err = warm_loss(params,primes_L,primes_R,cons_L,cons_R,test_truth)
 
             if test_err < min_err:
                 epoch_min = epoch
                 min_err = test_err
 
-            if epoch % 1000 == 0:
+            if epoch % 500 == 0:
                 print("Loss {:.2e} TE {:.2e}  TE_min {:.2e} EPmin {:d} EP {} ".format(loss, test_err, min_err, epoch_min, epoch))
             
             if epoch % 4000 == 0 and epoch > 0:
@@ -329,7 +329,7 @@ if __name__ == "__main__":
         
         save_params(params,os.path.join(proj("network/parameters"),"warm.pkl"))
 
-    warm_epochs = 5001
+    warm_epochs = 1501
     warm_start(warm_epochs)
 else:
     # uploading wandb

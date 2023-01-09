@@ -50,13 +50,6 @@ class mcTangentNN(RiemannSolver):
     def __init__(self, material_manager: MaterialManager, signal_speed: Callable) -> None:
         super().__init__(material_manager, signal_speed)
 
-    # def _reality_check(self, net_out: jnp.ndarray) -> jnp.ndarray:
-    #     """
-    #     Replace NaN or inf values from net outputs
-    #     """
-    #     checked = net_out
-    #     return checked
-
     @partial(jit, static_argnums=(0, 7))
     def solve_riemann_problem_xi(self, primes_L: jnp.DeviceArray, primes_R: jnp.DeviceArray, 
         cons_L: jnp.DeviceArray, cons_R: jnp.DeviceArray, axis: int, 
@@ -67,12 +60,8 @@ class mcTangentNN(RiemannSolver):
         assert type(net) == hk.Transformed, "Network architecture must be constructed using the Haiku Transform"
 
         # EVALUATE NEURAL NETWORK FOR TANGENT MANIFOLD
-        net_out_L = jit(net.apply)(params, primes_L, cons_L)
-        net_out_R = jit(net.apply)(params, primes_R, cons_R)
+        net_out = jit(net.apply)(params, primes_L, primes_R, cons_L, cons_R)
 
-        # net_out_L = self._reality_check(net_out_L)
-        # net_out_R = self._reality_check(net_out_R)
-
-        fluxes_xi = 0.5*(jnp.reshape(net_out_L,cons_L.shape) + jnp.reshape(net_out_R,cons_R.shape))
+        fluxes_xi = jnp.reshape(net_out,cons_L.shape)
         
         return fluxes_xi
