@@ -329,7 +329,7 @@ if __name__ == "__main__":
         
         save_params(params,os.path.join(proj("network/parameters"),"warm.pkl"))
 
-    warm_epochs = 1501
+    warm_epochs = 3001
     warm_start(warm_epochs)
 else:
     # uploading wandb
