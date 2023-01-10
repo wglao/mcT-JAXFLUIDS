@@ -243,7 +243,7 @@ def evaluate(params: hk.Params, data: jnp.ndarray) -> float:
     for sample in data:
         err_epoch += _evaluate_sample(params,sample)/setup.num_test
     # err_epoch = vmap(_evaluate_sample, in_axes=(None,0))(params, data)
-    return err_epoch if not jnp.isnan(err_epoch) and not jnp.isinf(err_epoch) else sys.float_info.max
+    return err_epoch if not jnp.isnan(err_epoch) and not jnp.isinf(err_epoch) else jnp.array(sys.float_info.max)
 
 # @partial(pmap, axis_name='data', in_axes=(0,0,0))
 # def update_par(params: hk.Params, opt_state: optax.OptState, data: jnp.ndarray) -> Tuple:
@@ -357,7 +357,7 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
         # call test function
         test_err = evaluate(state.params, test_coarse)
 
-        # t2 = time.time()
+        t2 = time.time()
 
         # save in case job is canceled, can resume
         save_params(state.params,os.path.join(param_path,'last.pkl'))
@@ -368,8 +368,8 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
             best_state = state
 
         if epoch % 10 == 0:  # Print every 10 epochs
-            print("time {:.2e}s loss {:.2e} TE {:.2e}  TE_min {:.2e} EPmin {:d} EP {} ".format(
-                    time.time() - t1, state.loss, test_err, min_err, epoch_min, epoch))
+            print("time {:.2e}s loss {:.2e} TE {:.2e}  TE_min {:.2e} EPmin {:d} EP {:d} ".format(
+                    t2 - t1, state.loss, test_err, min_err, epoch_min, epoch))
         
         if epoch == 0:  # Profile for memory monitoring
             jprof.save_device_memory_profile(f"memory/memory_{epoch}.prof") 
