@@ -62,8 +62,8 @@ batch_size = nt-ns-1
 layers = 1
 
 # sample set size
-num_train = 100
-num_test = 50
+num_train = 50
+num_test = 10
 
 # define batch by number of sequences trained on, instead of samples
 train_seqs = int(nt-ns-1)

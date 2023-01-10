@@ -57,17 +57,9 @@ from mcT_adv_setup import save_params, load_params, compare_params, mse, net, op
 
 mse = setup.mse
 
-@partial(jit,static_argnums=[2])
-def _add_noise(arr: jnp.ndarray, seed: int, noise_level: float):
-    noise_arr = jrand.normal(jrand.PRNGKey(seed),arr.shape)
-    noise_arr *= noise_level/jnp.max(noise_arr)
-    return arr * (1+noise_arr)
-
-def add_noise(arr: jnp.ndarray, seed: int):
-    return partial(_add_noise,noise_level=setup.noise_level)(arr,seed)
 
 @jit
-def get_coarse(data_fine: jnp.ndarray, seed: Optional[int] = 1) -> jnp.ndarray:
+def get_coarse(data_fine: jnp.ndarray) -> jnp.ndarray:
     """
     down samples the data by factor of 4 for use in training.
 
@@ -79,11 +71,22 @@ def get_coarse(data_fine: jnp.ndarray, seed: Optional[int] = 1) -> jnp.ndarray:
     :return data_coarse: downsampled data array, of shape [times, cxs(, cyz, czs)]
     """
     data_coarse = jim.resize(data_fine,(setup.nt+1,setup.nx,1,1),"linear")
-    if setup.noise_flag:
-        seed_arr = jrand.randint(jrand.PRNGKey(seed),(setup.nt+1,),1,setup.nt+1)
-        data_coarse = vmap(add_noise,in_axes=(0,0))(data_coarse,seed_arr)
-    
     return data_coarse
+
+@partial(jit,static_argnums=[0])
+def _add_noise(noise_level: float, arr: jnp.ndarray, seed: int):
+    noise_arr = jrand.normal(jrand.PRNGKey(seed),arr.shape)
+    noise_arr *= noise_level/jnp.max(noise_arr)
+    return arr * (1+noise_arr)
+
+def _partial_add_noise(arr: jnp.ndarray, seed: int):
+    return partial(_add_noise,setup.noise_level)(arr,seed)
+
+@jit
+def add_noise(data: jnp.ndarray, seed: Optional[int] = 1):
+    seed_arr = jrand.randint(jrand.PRNGKey(seed),(5,),1,100)
+    data_noisy = vmap(_partial_add_noise,in_axes=(0,0))(data,seed_arr)
+    return data_noisy
 
 def get_par_batch(serial):
     n_dev = jax.local_device_count()
@@ -106,13 +109,14 @@ def get_par_batch(serial):
 #         ml_networks_dict
 #     )
 
-def get_loss_batch(params: hk.Params, sample:jnp.ndarray) -> float:
+def get_loss_batch(params: hk.Params, sample:jnp.ndarray, seed: int) -> float:
     """
     Uses a highly resolved simulation as ground truth to calculate loss over a sample
     
     ----- inputs -----\n
     :param params: holds parameters of the NN
     :param sample: training data for one batch, of shape [sequences, primes, timesteps, xs(, ys, zs)]
+    :param seed: seed number, used as an rng seed for noise
 
     ----- returns -----\n
     :return loss_batch: average loss over all sequences in the sample
@@ -131,18 +135,25 @@ def get_loss_batch(params: hk.Params, sample:jnp.ndarray) -> float:
     input_reader = InputReader(coarse_case,coarse_num)
     sim_manager = SimulationManager(input_reader)
 
-    ml_primes_init = sample[:,:,0,...]
+    ml_pred_arr = jnp.zeros_like(sample)
+    ml_primes_init = sample[:,:,:-1,...]
+    ml_primes_init = jnp.moveaxis(ml_primes_init,2,1)
+    if setup.noise_flag:
+        ml_primes_init = vmap(vmap(add_noise, in_axes=(0,None)),in_axes=(0,None))(ml_primes_init,seed)
 
-    ml_pred_arr, _ = sim_manager.feed_forward(
+    feed_forward_batch = vmap(sim_manager.feed_forward, in_axes=(0,None,None,None,None,None,None,None), out_axes=(0,0))
+
+    ml_pred_arr, _ = feed_forward_batch(
         ml_primes_init,
         None, # not needed for single-phase, but is a required arg for feed_forward
-        setup.ns+1,
+        1,
         coarse_case['general']['save_dt'],
         0.0, 1,
         ml_parameters_dict,
         ml_networks_dict
     )
     ml_pred_arr = jnp.array(ml_pred_arr) # default
+    ml_pred_arr = ml_pred_arr[:,:,1,...]
     ml_pred_arr = jnp.moveaxis(ml_pred_arr,0,2)
     # ml_pred_arr = jnp.swapaxes(ml_pred_arr,1,2) # scan
 
@@ -303,10 +314,10 @@ def update(params: hk.Params, opt_state: optax.OptState, data: jnp.ndarray) -> T
         sample = jnp.swapaxes(sample,0,1)
         loss_sample = 0
         grad_sample = {}
-
+        
         for i in range(setup.num_batches):
             seqs = lax.dynamic_slice_in_dim(sample,i*setup.batch_size,setup.batch_size)
-            loss_batch, grad_batch = value_and_grad(get_loss_batch, argnums=0)(params, seqs)
+            loss_batch, grad_batch = value_and_grad(get_loss_batch, argnums=0)(params, seqs, i)
             # loss_batch = get_loss_batch(params, seqs)
             # grad_batch = params
             loss_sample, grad_sample = cumulate(loss_sample, loss_batch, grad_sample, grad_batch, setup.num_batches)
@@ -338,10 +349,10 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
         # reset each epoch
         state = TrainingState(state.params,state.opt_state,0)
         
-        # train_coarse = jit(vmap(jit(vmap(get_coarse, in_axes=(0,None))),in_axes=(0,None)))(data_train,epoch)
-        # test_coarse = jit(vmap(jit(vmap(get_coarse, in_axes=(0,None))),in_axes=(0,None)))(data_test,epoch)
-        train_coarse = vmap(vmap(get_coarse, in_axes=(0,None)),in_axes=(0,None))(data_train,epoch)
-        test_coarse = vmap(vmap(get_coarse, in_axes=(0,None)),in_axes=(0,None))(data_test,epoch)
+        train_coarse = jit(vmap(jit(vmap(get_coarse, in_axes=(0,))),in_axes=(0,)))(data_train)
+        test_coarse = jit(vmap(jit(vmap(get_coarse, in_axes=(0,))),in_axes=(0,)))(data_test)
+        # train_coarse = vmap(vmap(get_coarse, in_axes=(0,)),in_axes=(0,))(data_train)
+        # test_coarse = vmap(vmap(get_coarse, in_axes=(0,)),in_axes=(0,))(data_test)
 
         # sequence data
         train_seq = jnp.array([train_coarse[:,:, ii:(ii+setup.ns+2), ...] for ii in range(setup.nt-setup.ns-1)])
@@ -374,7 +385,7 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
         if epoch == 0:  # Profile for memory monitoring
             jprof.save_device_memory_profile(f"memory/memory_{epoch}.prof") 
         
-        if epoch % 10 == 0 and epoch > 0:  # Clear every 10 epochs
+        if True:  # Clear every 1 epochs
             jax.clear_backends()
 
         
