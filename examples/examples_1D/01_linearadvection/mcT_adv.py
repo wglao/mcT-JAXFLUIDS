@@ -152,14 +152,11 @@ def get_loss_batch(params: hk.Params, sample:jnp.ndarray, seed: int) -> float:
         ml_parameters_dict,
         ml_networks_dict
     )
-    ml_pred_arr = jnp.array(ml_pred_arr) # default
-    ml_pred_arr = ml_pred_arr[:,:,1,...]
-    ml_pred_arr = jnp.moveaxis(ml_pred_arr,0,2)
-    # ml_pred_arr = jnp.swapaxes(ml_pred_arr,1,2) # scan
+    ml_pred_arr = jnp.array(ml_pred_arr[1])
+    ml_pred_arr = jnp.swapaxes(ml_pred_arr,1,2)
 
     # ml loss
-    ml_loss_batch = mse(ml_pred_arr[:,:,1:,...], sample[:,:,1:,...]) # default
-    # ml_loss_batch = mse(ml_pred_arr, sample[:,:,1:,...]) # scan
+    ml_loss_batch = mse(ml_pred_arr, sample[:,:,1:,...])
 
     return ml_loss_batch
     # if not setup.mc_flag:
