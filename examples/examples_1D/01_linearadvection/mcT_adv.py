@@ -374,7 +374,7 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
         if epoch == 0:  # Profile for memory monitoring
             jprof.save_device_memory_profile(f"memory/memory_{epoch}.prof") 
         
-        if epoch % 3 == 0 and epoch > 0:  # Clear every 5 epochs
+        if epoch % 10 == 0 and epoch > 0:  # Clear every 10 epochs
             jax.clear_backends()
 
         

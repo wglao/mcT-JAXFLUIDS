@@ -28,13 +28,16 @@ parallel_flag = False
 mc_flag = False
 noise_flag = True
 
+# use warm params
+load_warm = True
+
 case_name = 'mcT_adv'
 
 c = 0.9
 u = 1.0
 
 t_max = 2.0
-nt = 100
+nt = 10
 dt = t_max/nt
 
 x_max = 2.0
@@ -54,20 +57,17 @@ noise_level = 0.02 if noise_flag else 0
 ns = 1
 
 num_epochs = int(200)
-learning_rate = 1e-6
+learning_rate = 1e-7
 batch_size = nt-ns-1
 layers = 1
 
 # sample set size
-num_train = 10
-num_test = 10
+num_train = 100
+num_test = 50
 
 # define batch by number of sequences trained on, instead of samples
 train_seqs = int(nt-ns-1)
 num_batches = int(np.ceil(train_seqs/batch_size))
-
-# use warm params
-load_warm = True
 
 # edit case setup
 f = open(case_name+'.json','r')
@@ -322,7 +322,7 @@ if __name__ == "__main__":
                 epoch_min = epoch
                 min_err = test_err
 
-            if epoch % 500 == 0:
+            if epoch % 500 == 0 or epoch == epochs-1:
                 print("Loss {:.2e} TE {:.2e}  TE_min {:.2e} EPmin {:d} EP {} ".format(loss, test_err, min_err, epoch_min, epoch))
             
             if epoch % 4000 == 0 and epoch > 0:
@@ -333,7 +333,7 @@ if __name__ == "__main__":
         
         save_params(params,os.path.join(proj("network/parameters"),"warm.pkl"))
 
-    warm_epochs = 191
+    warm_epochs = 301
     warm_start(warm_epochs)
 else:
     # uploading wandb
