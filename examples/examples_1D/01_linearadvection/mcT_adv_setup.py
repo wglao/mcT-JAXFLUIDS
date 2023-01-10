@@ -284,6 +284,8 @@ if __name__ == "__main__":
         for epoch in range(epochs):
             dat.data.check_sims()
             sim = dat.data.next_sim()
+            for _ in range(epoch%dat.data.size()):  # vary training data
+                sim = dat.data.next_sim()
             case_dict = sim.case
             numerical = sim.numerical
 
@@ -309,6 +311,8 @@ if __name__ == "__main__":
             params = jit(optax.apply_updates)(params, updates)
             
             # test
+            if dat.data.size() == 0:
+                dat.data.check_sims()
             sim = dat.data.next_sim()
             primes_L,primes_R,cons_L,cons_R = warm_load(sim,sim_manager,epoch)
             test_truth = warm_true(primes_L,primes_R,cons_L,cons_R,0)
@@ -329,7 +333,7 @@ if __name__ == "__main__":
         
         save_params(params,os.path.join(proj("network/parameters"),"warm.pkl"))
 
-    warm_epochs = 3001
+    warm_epochs = 191
     warm_start(warm_epochs)
 else:
     # uploading wandb
