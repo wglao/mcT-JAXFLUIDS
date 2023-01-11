@@ -25,7 +25,7 @@ save_path = proj('data')
 parallel_flag = False
 
 # data only
-mc_flag = False
+mc_flag = True
 noise_flag = True
 
 # use warm params
@@ -37,7 +37,7 @@ c = 0.9
 u = 1.0
 
 t_max = 2.0
-nt = 10
+nt = 200
 dt = t_max/nt
 
 x_max = 2.0
@@ -55,15 +55,16 @@ nz_fine = nz
 mc_alpha = 1e5 if mc_flag else 0
 noise_level = 0.02 if noise_flag else 0
 ns = 1
+nr = 1
 
-num_epochs = int(200)
+num_epochs = int(50)
 learning_rate = 1e-7
 batch_size = nt-ns-1
 layers = 1
 
 # sample set size
-num_train = 10
-num_test = 5
+num_train = 100
+num_test = 10
 
 # define batch by number of sequences trained on, instead of samples
 train_seqs = int(nt-ns-1)
@@ -324,7 +325,7 @@ if __name__ == "__main__":
             if epoch % 500 == 0 or epoch == epochs-1:
                 print("Loss {:.2e} TE {:.2e}  TE_min {:.2e} EPmin {:d} EP {} ".format(loss, test_err, min_err, epoch_min, epoch))
             
-            if epoch % 4000 == 0 and epoch > 0:
+            if epoch % 200 == 0 and epoch > 0:
                 jax.clear_backends()
             wandb.log({"Train loss": float(loss), "Test Error": float(test_err), 'Test Min': float(min_err), 'Epoch' : float(epoch)})
             # clean up

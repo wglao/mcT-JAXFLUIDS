@@ -109,6 +109,23 @@ def get_par_batch(serial):
 #         ml_networks_dict
 #     )
 
+def get_rseqs(k_pred: jnp.ndarray) -> jnp.ndarray:
+    """
+    Resequences kth ML prediction sequence for every Rth prediction for MC loss
+
+    ----- inputs -----\n
+    :param k_pred: kth ML prediction sequence, of shape [ns+1+nr, 5, xs(, ys, zs)]
+
+    ----- returns -----\n
+    :return rseqs: resequenced prediction, of shape [ns+nr, nr, 5, xs(, ys, zs)]
+    """
+    n_rseq = setup.ns+setup.nr
+    rseqs = jnp.zeros((n_rseq,setup.nr,5,setup.nx,1,1))
+    for i in range(n_rseq):
+        rseq_i = lax.dynamic_slice_in_dim(k_pred,i,setup.nr)
+        rseqs = rseqs.at[i].set(rseq_i)
+    return rseqs
+
 def get_loss_batch(params: hk.Params, sample:jnp.ndarray, sim: dat.Sim, seed: int) -> float:
     """
     Uses a highly resolved simulation as ground truth to calculate loss over a sample
@@ -157,30 +174,72 @@ def get_loss_batch(params: hk.Params, sample:jnp.ndarray, sim: dat.Sim, seed: in
     # ml loss
     ml_loss_batch = mse(ml_pred_arr, sample[:,:,1:,...])
 
-    return ml_loss_batch
-    # if not setup.mc_flag:
-    # if jnp.isnan(ml_pred_arr).any() or (ml_pred_arr<0).any():
-    #     return (setup.mc_alpha*10)*ml_loss_sample
+    if not setup.mc_flag:
+        return ml_loss_batch
     
     # mc loss
-    # coarse_num['conservatives']['convective_fluxes']['riemann_solver'] = "HLLC"
-    # input_reader = InputReader(coarse_case,coarse_num)
-    # sim_manager = SimulationManager(input_reader)
+    # ff R additional steps
+    min_rho = jnp.min(ml_primes_init[:,0,...])
+    ml_primes_init_R = ml_pred_arr[:,:,-1,...]
+
+    ml_pred_arr_R, _ = sim_manager.feed_forward(
+        ml_primes_init_R,
+        None, # not needed for single-phase, but is a required arg for feed_forward
+        setup.nr,
+        coarse_case['general']['save_dt'],
+        0.0, 1,
+        ml_parameters_dict,
+        ml_networks_dict
+    )
+    ml_pred_arr_R = jnp.array(ml_pred_arr_R[1:])
+    ml_pred_arr_R = jnp.moveaxis(ml_pred_arr_R,0,2)
+    ml_pred_arr_R = jnp.concatenate((ml_pred_arr,ml_pred_arr_R),2)
+    ml_pred_arr_R = jnp.swapaxes(ml_pred_arr_R,1,2)
     
-    # #  map over times, concatenate all sequences
-    # mc_primes_init = jnp.concatenate(jnp.swapaxes(ml_pred_arr[:,:,:-1,...],1,2))
+    # resequence for each R seq
+    ml_rseqs = jnp.concatenate(vmap(get_rseqs,in_axes=(0,))(ml_pred_arr_R))
 
-    # mc_pred_arr, _ = sim_manager.feed_forward(
-    #     mc_primes_init,
-    #     jnp.empty_like(mc_primes_init), # not needed for single-phase, but is a required arg
-    #     1, coarse_case['general']['save_dt'], 0
-    # )
+    coarse_num['conservatives']['convective_fluxes']['riemann_solver'] = "HLLC"
+    input_reader = InputReader(coarse_case,coarse_num)
+    sim_manager = SimulationManager(input_reader)
+    
+    #  map over times, concatenate all sequences
+    mc_primes_init = jnp.concatenate(jnp.concatenate(
+        (jnp.swapaxes(jnp.reshape(ml_primes_init,(setup.nt-setup.ns-1,5,1,setup.nx,1,1)),1,2),
+        jnp.swapaxes(ml_pred_arr,1,2)),axis=1))
+
+    # enforce realistic bounds
+    # jax.config.update("jax_disable_jit", True)
+
+    mc_primes_init = mc_primes_init.at[:,0,...].set(jnp.where(mc_primes_init[:,0,...]<min_rho,
+                                                    jnp.full_like(mc_primes_init[:,0,...],min_rho),
+                                                    mc_primes_init[:,0,...]))
+    mc_primes_init = mc_primes_init.at[:,1,...].set(jnp.ones_like(mc_primes_init[:,1,...]))
+    mc_primes_init = mc_primes_init.at[:,2:3,...].set(jnp.zeros_like(mc_primes_init[:,2:3,...]))
+    mc_primes_init = mc_primes_init.at[:,4,...].set(jnp.ones_like(mc_primes_init[:,4,...]))
+    # print(jnp.sum(mc_primes_init[:,0,...].primal<=0))
+    # print(jnp.sum(mc_primes_init[:,2:3,...].primal!=0))
+    # print(jnp.sum(mc_primes_init[:,4,...].primal<=0))
+    # jax.config.update("jax_disable_jit", False)
+
+
+    mc_pred_arr, _ = sim_manager.feed_forward(
+        mc_primes_init,
+        None, # not needed for single-phase, but is a required arg for feed_forward
+        setup.nr,
+        coarse_case['general']['save_dt'],
+        0.0, 1,
+        ml_parameters_dict,
+        ml_networks_dict
+    )
     # mc_pred_arr = jnp.nan_to_num(mc_pred_arr)
+    mc_pred_arr = jnp.array(mc_pred_arr[1:])
+    mc_pred_arr = jnp.moveaxis(mc_pred_arr,0,2)
+    # mc_rseqs = vmap(get_rseqs,in_axes=(0,))(mc_pred_arr)
 
-    # ml_pred_mcloss = jnp.concatenate(jnp.swapaxes(ml_pred_arr[:,:,1:,...],1,2))
-    # mc_loss_sample = setup.mc_alpha * mse(ml_pred_mcloss,mc_pred_arr[jnp.s_[:,-1,...]])
-    # loss_sample = ml_loss_sample + mc_loss_sample
-    # return loss_sample
+    mc_loss_batch = setup.mc_alpha/setup.nr * mse(ml_rseqs,mc_pred_arr)
+    loss_batch = ml_loss_batch + mc_loss_batch
+    return loss_batch
 
 # @jit
 def _evaluate_sample(params: hk.Params, sample: jnp.ndarray) -> jnp.ndarray:
