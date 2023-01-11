@@ -25,15 +25,14 @@ save_path = proj('data')
 parallel_flag = False
 
 # data only
-mc_flag = True
-noise_flag = True
+mc_flag = False
+noise_flag = False
 
 # use warm params
 load_warm = True
 
 case_name = 'mcT_adv'
 
-c = 0.9
 u = 1.0
 
 t_max = 2.0
@@ -41,16 +40,19 @@ nt = 200
 dt = t_max/nt
 
 x_max = 2.0
-dx = u*dt/c
+nx = 180
+dx = x_max/nx
 nx = np.ceil(x_max/dx)
 dx = x_max/float(nx)
 
-nx = int(nx)
 ny = 1
 nz = 1
 nx_fine = 4*nx
 ny_fine = ny
 nz_fine = nz
+cfl = u*dt/dx
+
+assert cfl <= 1, "Bad CFL Condition for Implicit Solvers"
 
 mc_alpha = 1e5 if mc_flag else 0
 noise_level = 0.02 if noise_flag else 0
@@ -166,12 +168,12 @@ def mse(pred: jnp.ndarray, true: Optional[jnp.ndarray] = None) -> float:
 def mcT_fn(cons: jnp.ndarray) -> jnp.ndarray:
     """Dense network with 1 layer of ReLU units"""
     mcT = hk.Sequential([
-        hk.Linear(5*(nx + 1)), jax.nn.relu,
+        hk.Flatten(),
+        hk.Linear(nx + 1), jax.nn.relu,
         # hk.Linear(32), jax.nn.relu,  # try second layer
-        hk.Linear(5*(nx + 1))
+        hk.Linear(nx + 1)
     ])
-    state = jnp.concatenate((cons),axis=None)
-    flux = mcT(state)
+    flux = mcT(cons)
     return flux
 
 net = hk.without_apply_rng(hk.transform(mcT_fn))
