@@ -67,8 +67,7 @@ num_train = 10
 num_test = 10
 
 # define batch by number of sequences trained on, instead of samples
-train_seqs = int(np.floor((nt-ns-1)/100))
-num_batches = int(np.ceil(train_seqs/batch_size))
+num_batches = int(np.ceil(num_train/batch_size))
 
 # edit case setup
 f = open(case_name+'.json','r')

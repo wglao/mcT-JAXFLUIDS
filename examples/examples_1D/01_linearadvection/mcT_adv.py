@@ -70,7 +70,7 @@ def get_coarse(data_fine: jnp.ndarray) -> jnp.ndarray:
     ----- returns -----\n
     :return data_coarse: downsampled data array, of shape [times, cxs(, cyz, czs)]
     """
-    data_coarse = jim.resize(data_fine,(setup.nt+1,setup.nx,1,1),"linear")
+    data_coarse = jim.resize(data_fine,(data_fine.shape[0],setup.nx,1,1),"linear")
     return data_coarse
 
 @partial(jit,static_argnums=[0])
@@ -126,18 +126,18 @@ def get_rseqs(k_pred: jnp.ndarray) -> jnp.ndarray:
         rseqs = rseqs.at[i].set(rseq_i)
     return rseqs
 
-def get_loss_batch(params: hk.Params, sample:jnp.ndarray, sim: dat.Sim, seed: int) -> float:
+def get_loss_sample(params: hk.Params, sample:jnp.ndarray, sim: dat.Sim, seed: int) -> float:
     """
     Uses a highly resolved simulation as ground truth to calculate loss over a sample
     
     ----- inputs -----\n
     :param params: holds parameters of the NN
-    :param sample: training data for one batch, of shape [sequences, primes, timesteps, xs(, ys, zs)]
+    :param sample: training data for one sample, of shape [sequences, primes, timesteps, xs(, ys, zs)]
     :param sim: contains information about the truth simulation
     :param seed: seed number, used as an rng seed for noise
 
     ----- returns -----\n
-    :return loss_batch: average loss over all sequences in the sample
+    :return loss_sample: average loss over all sequences in the sample
     """
     # feed forward with mcTangent ns+1 steps
     coarse_case = sim.case
@@ -158,7 +158,7 @@ def get_loss_batch(params: hk.Params, sample:jnp.ndarray, sim: dat.Sim, seed: in
         ml_primes_init = vmap(add_noise, in_axes=(0,None))(ml_primes_init,seed)
 
 
-    # feed_forward_batch = vmap(sim_manager.feed_forward, in_axes=(0,None,None,None,None,None,None,None), out_axes=(0,0))
+    # feed_forward_sample = vmap(sim_manager.feed_forward, in_axes=(0,None,None,None,None,None,None,None), out_axes=(0,0))
     ml_pred_arr, _ = sim_manager.feed_forward(
         ml_primes_init,
         None, # not needed for single-phase, but is a required arg for feed_forward
@@ -172,10 +172,10 @@ def get_loss_batch(params: hk.Params, sample:jnp.ndarray, sim: dat.Sim, seed: in
     ml_pred_arr = jnp.moveaxis(ml_pred_arr,0,2)
 
     # ml loss
-    ml_loss_batch = mse(ml_pred_arr, sample[:,:,1:,...])
+    ml_loss_sample = mse(ml_pred_arr, sample[:,:,1:,...])
 
     if not setup.mc_flag:
-        return ml_loss_batch
+        return ml_loss_sample
     
     # mc loss
     # ff R additional steps
@@ -237,9 +237,9 @@ def get_loss_batch(params: hk.Params, sample:jnp.ndarray, sim: dat.Sim, seed: in
     mc_pred_arr = jnp.moveaxis(mc_pred_arr,0,2)
     # mc_rseqs = vmap(get_rseqs,in_axes=(0,))(mc_pred_arr)
 
-    mc_loss_batch = setup.mc_alpha/setup.nr * mse(ml_rseqs,mc_pred_arr)
-    loss_batch = ml_loss_batch + mc_loss_batch
-    return loss_batch
+    mc_loss_sample = setup.mc_alpha/setup.nr * mse(ml_rseqs,mc_pred_arr)
+    loss_sample = ml_loss_sample + mc_loss_sample
+    return loss_sample
 
 # @jit
 def _evaluate_sample(params: hk.Params, sample: jnp.ndarray) -> jnp.ndarray:
@@ -373,24 +373,22 @@ def update(params: hk.Params, opt_state: optax.OptState, data: jnp.ndarray) -> T
     # loop through data to lower memory cost
     loss = 0
     grads = {}
-    for sample in data:
+    for ii in range(setup.num_batches):
+        data = lax.dynamic_index_in_dim(data,ii*setup.batch_size,setup.batch_size)
         sample = jnp.swapaxes(sample,0,1)
-        loss_sample = 0
-        grad_sample = {}
-        sim = dat.data.next_sim()
+        loss_batch = 0
+        grad_batch = {}
 
-        for i in range(setup.num_batches):
-            seqs = lax.dynamic_slice_in_dim(sample,i*setup.batch_size,setup.batch_size)
-            loss_batch, grad_batch = value_and_grad(get_loss_batch, argnums=0)(params, seqs, sim, i)
-            # loss_batch = get_loss_batch(params, seqs)
-            # grad_batch = params
-            loss_sample, grad_sample = cumulate(loss_sample, loss_batch, grad_sample, grad_batch, setup.num_batches)
+        for sample in data:
+            sim = dat.data.next_sim()
+            loss_sample, grad_sample = value_and_grad(get_loss_sample, argnums=0)(params, sample, sim, ii)
+            loss_batch, grad_batch = cumulate(loss_batch, loss_sample, grad_batch, grad_sample, data.shape[0])
 
+        updates, opt_state = jit(optimizer.update)(grad_batch, opt_state)
+        params = jit(optax.apply_updates)(params, updates)
         loss, grads = cumulate(loss, loss_sample, grads, grad_sample, data.shape[0])
-    updates, opt_state_new = jit(optimizer.update)(grads, opt_state)
-    params_new = jit(optax.apply_updates)(params, updates)
 
-    return params_new, opt_state_new, loss
+    return params, opt_state, loss
 
 def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -> Tuple[TrainingState,TrainingState]:
     """
