@@ -41,8 +41,6 @@ dt = t_max/nt
 
 x_max = 2.0
 nx = 180
-dx = x_max/nx
-nx = np.ceil(x_max/dx)
 dx = x_max/float(nx)
 
 ny = 1
@@ -173,8 +171,8 @@ def mcT_fn(cons: jnp.ndarray) -> jnp.ndarray:
         # hk.Linear(32), jax.nn.relu,  # try second layer
         hk.Linear(nx + 1)
     ])
-    flux = mcT(cons)
-    return flux
+    tangent = mcT(cons)
+    return tangent
 
 net = hk.without_apply_rng(hk.transform(mcT_fn))
 optimizer = optax.adam(learning_rate)
@@ -252,7 +250,7 @@ if __name__ == "__main__":
     def warm_loss(params,cons_L,cons_R,truth):
         cons_in = 0.5*(cons_L+cons_R)
         net_out = jnp.array(jax.vmap(net.apply, in_axes=(None,0))(params,cons_in))
-        net_fluxes = jnp.reshape(net_out,cons_in.shape)
+        net_fluxes = jnp.reshape(net_out/dx,cons_in.shape)
         loss = mse(net_fluxes,truth)
         return loss
 
@@ -335,7 +333,7 @@ if __name__ == "__main__":
         
         save_params(params,os.path.join(proj("network/parameters"),"warm.pkl"))
 
-    warm_epochs = 301
+    warm_epochs = 501
     warm_start(warm_epochs)
 else:
     # uploading wandb

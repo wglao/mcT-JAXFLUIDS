@@ -40,6 +40,8 @@ from jaxfluids.solvers.source_term_solver import SourceTermSolver
 from jaxfluids.levelset.levelset_handler import LevelsetHandler
 from jaxfluids.stencils import DICT_CENTRAL_RECONSTRUCTION, DICT_FIRST_DERIVATIVE_CENTER, DICT_DERIVATIVE_FACE
 
+from mcTangentNN import mcTangentNN
+
 class SpaceSolver:
     """The Space Solver class manages the calculation of the righ-hand-side (i.e., fluxes) of the NSE
     and, for two-phase simulations, manages the calculation of the rhs of the level-set advection.
@@ -149,6 +151,8 @@ class SpaceSolver:
             # CONVECTIVE CONTRIBUTION
             if self.is_convective_flux:
                 flux_xi += self.flux_computer.compute_convective_flux_xi(primes, cons, axis, ml_parameters_dict, ml_networks_dict)
+                if self.flux_computer.flux_computer.riemann_solver == mcTangentNN:
+                    flux_xi /= self.one_cell_size[axis]
             
             # # VISCOUS CONTRIBUTION
             if self.is_viscous_flux:

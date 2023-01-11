@@ -63,6 +63,6 @@ class mcTangentNN(RiemannSolver):
         cons_in = 0.5 * (cons_L + cons_R)
         net_out = jit(net.apply)(params, cons_in)
 
-        fluxes_xi = jnp.reshape(net_out,cons_in.shape)
+        tangent = jnp.reshape(net_out,cons_in.shape)
         
-        return fluxes_xi
+        return tangent
