@@ -315,7 +315,7 @@ if __name__ == "__main__":
             sim = dat.data.next_sim()
             primes_L,primes_R,cons_L,cons_R = warm_load(sim,sim_manager,epoch)
             test_truth = warm_true(primes_L,primes_R,cons_L,cons_R,0)
-            test_err = warm_loss(params,primes_L,primes_R,cons_L,cons_R,test_truth)
+            test_err = warm_loss(params,cons_L,cons_R,test_truth)
 
             if test_err < min_err:
                 epoch_min = epoch
