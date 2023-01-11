@@ -109,19 +109,19 @@ def get_par_batch(serial):
 #         ml_networks_dict
 #     )
 
-def get_loss_batch(params: hk.Params, sample:jnp.ndarray, seed: int) -> float:
+def get_loss_batch(params: hk.Params, sample:jnp.ndarray, sim: dat.Sim, seed: int) -> float:
     """
     Uses a highly resolved simulation as ground truth to calculate loss over a sample
     
     ----- inputs -----\n
     :param params: holds parameters of the NN
     :param sample: training data for one batch, of shape [sequences, primes, timesteps, xs(, ys, zs)]
+    :param sim: contains information about the truth simulation
     :param seed: seed number, used as an rng seed for noise
 
     ----- returns -----\n
     :return loss_batch: average loss over all sequences in the sample
     """
-    sim = dat.data.next_sim()
     # feed forward with mcTangent ns+1 steps
     coarse_case = sim.case
     coarse_num = sim.numerical
@@ -191,7 +191,7 @@ def _evaluate_sample(params: hk.Params, sample: jnp.ndarray) -> jnp.ndarray:
 
     ----- inputs -----\n
     :param params: holds parameters of the NN
-    :param sample: allows for mapping input for vmap api, also used as the seed number if noise flag is True
+    :param sample: sample of data to be used for validation, of shape [primes, sequences, timesteps, xs]
 
     ----- returns -----\n
     :return err_sample: mean squared error for the sample
@@ -311,10 +311,11 @@ def update(params: hk.Params, opt_state: optax.OptState, data: jnp.ndarray) -> T
         sample = jnp.swapaxes(sample,0,1)
         loss_sample = 0
         grad_sample = {}
-        
+        sim = dat.data.next_sim()
+
         for i in range(setup.num_batches):
             seqs = lax.dynamic_slice_in_dim(sample,i*setup.batch_size,setup.batch_size)
-            loss_batch, grad_batch = value_and_grad(get_loss_batch, argnums=0)(params, seqs, i)
+            loss_batch, grad_batch = value_and_grad(get_loss_batch, argnums=0)(params, seqs, sim, i)
             # loss_batch = get_loss_batch(params, seqs)
             # grad_batch = params
             loss_sample, grad_sample = cumulate(loss_sample, loss_batch, grad_sample, grad_batch, setup.num_batches)
@@ -345,6 +346,7 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
         # os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "default"
         # reset each epoch
         state = TrainingState(state.params,state.opt_state,0)
+        dat.data.check_sims()
         
         train_coarse = jit(vmap(jit(vmap(get_coarse, in_axes=(0,))),in_axes=(0,)))(data_train)
         test_coarse = jit(vmap(jit(vmap(get_coarse, in_axes=(0,))),in_axes=(0,)))(data_test)
