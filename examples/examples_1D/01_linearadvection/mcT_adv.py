@@ -406,10 +406,9 @@ if __name__ == "__main__":
     # os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
     # data input will be (primes_L, primes_R, cons_L, cons_R) -> ([5,(nx+1),ny,nz], [5,(nx+1),ny,nz], [5,(nx+1),ny,nz], [5,(nx+1),ny,nz])
-    rho_init = 2*jnp.ones((1,setup.nx+1,setup.ny,setup.nz))
-    primes_init = jnp.concatenate((rho_init,jnp.ones_like(rho_init),jnp.zeros_like(rho_init),jnp.zeros_like(rho_init),jnp.ones_like(rho_init)))
-    cons_init = jnp.concatenate((rho_init,rho_init,jnp.zeros_like(rho_init),jnp.zeros_like(rho_init),1.5*rho_init))
-    initial_params = net.init(jrand.PRNGKey(setup.num_epochs), primes_init, primes_init, cons_init, cons_init)  # (rng, "primes", "cons")
+    cons_init = jnp.zeros((5,setup.nx+1,1,1))
+    initial_params = net.init(jrand.PRNGKey(1), cons_init)
+    del cons_init
     if os.path.exists(os.path.join(param_path,'warm.pkl')) and setup.load_warm:
         warm_params = load_params(param_path,'warm.pkl')    
         if compare_params(warm_params,initial_params):
@@ -418,7 +417,6 @@ if __name__ == "__main__":
         else:
             os.system('rm {}'.format(os.path.join(param_path,'warm.pkl')))
         del warm_params
-    del rho_init, primes_init, cons_init
 
     initial_opt_state = optimizer.init(initial_params)
 

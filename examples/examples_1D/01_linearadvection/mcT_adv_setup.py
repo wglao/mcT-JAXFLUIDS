@@ -162,14 +162,14 @@ def mse(pred: jnp.ndarray, true: Optional[jnp.ndarray] = None) -> float:
     return _mse(pred - true)
 
 # dense network, layer count variable not yet implemented
-def mcT_fn(primes_L: jnp.ndarray, primes_R: jnp.ndarray, cons_L: jnp.ndarray, cons_R: jnp.ndarray) -> jnp.ndarray:
+def mcT_fn(cons: jnp.ndarray) -> jnp.ndarray:
     """Dense network with 1 layer of ReLU units"""
     mcT = hk.Sequential([
         hk.Linear(5*(nx + 1)), jax.nn.relu,
         # hk.Linear(32), jax.nn.relu,  # try second layer
         hk.Linear(5*(nx + 1))
     ])
-    state = jnp.concatenate((primes_L,primes_R,cons_L,cons_R),axis=None)
+    state = jnp.concatenate((cons),axis=None)
     flux = mcT(state)
     return flux
 
@@ -246,15 +246,16 @@ if __name__ == "__main__":
 
     print('\n'+'-'*5+'Warm Start'+'-'*5+'\n')
     
-    def warm_loss(params,primes_L,primes_R,cons_L,cons_R,truth):
-        net_out = jnp.array(jax.vmap(net.apply, in_axes=(None,0,0,0,0))(params,primes_L,primes_R,cons_L,cons_R))
-        net_fluxes = jnp.reshape(net_out,truth.shape)
+    def warm_loss(params,cons_L,cons_R,truth):
+        cons_in = 0.5*(cons_L+cons_R)
+        net_out = jnp.array(jax.vmap(net.apply, in_axes=(None,0))(params,cons_in))
+        net_fluxes = jnp.reshape(net_out,cons_in.shape)
         loss = mse(net_fluxes,truth)
         return loss
 
     def warm_load(sim: dat.Sim, sim_manager: SimulationManager, epoch: int):
         primes = jax.device_put(sim.load()[3])
-        primes = jax.vmap(get_coarse, in_axes=(0,None))(primes,epoch)
+        primes = jax.vmap(get_coarse, in_axes=(0))(primes)
         primes = jnp.swapaxes(primes,0,1)
         nh = numerical['conservatives']['halo_cells']
         pad_dims = ((0,0),(0,0),(nh,nh),(0,0),(0,0))
@@ -272,12 +273,10 @@ if __name__ == "__main__":
 
     def warm_start(epochs):
         # init net params
-        rho_init = jnp.ones((1,nx+1,ny,nz))
-        primes_init = jnp.concatenate((rho_init,jnp.ones_like(rho_init),jnp.zeros_like(rho_init),jnp.zeros_like(rho_init),jnp.ones_like(rho_init)))
-        cons_init = jnp.concatenate((rho_init,rho_init,jnp.zeros_like(rho_init),jnp.zeros_like(rho_init),1.5*rho_init))
-        params = net.init(jrand.PRNGKey(epochs), primes_init, primes_init, cons_init, cons_init)
+        cons_init = jnp.zeros((5,nx+1,1,1))
+        params = net.init(jrand.PRNGKey(epochs), cons_init)
         opt_state = optimizer.init(params)
-        del rho_init, primes_init, cons_init
+        del cons_init
 
         min_err = sys.float_info.max
         epoch_min = -1
@@ -301,12 +300,12 @@ if __name__ == "__main__":
             primes_L,primes_R,cons_L,cons_R = warm_load(sim,sim_manager,epoch)
 
             # learn
-            # truth_array = warm_true(primes_L,cons_L)
             model = HLLC(sim_manager.material_manager,signal_speed_Einfeldt)
             # model = Rusanov(sim_manager.material_manager,signal_speed_Einfeldt)
+
             warm_true = jax.vmap(model.solve_riemann_problem_xi, in_axes=(0,0,0,0,None))
             truth_array = jnp.array(warm_true(primes_L,primes_R,cons_L,cons_R,0))
-            loss, grads = jax.value_and_grad(jit(warm_loss),argnums=(0))(params,primes_L,primes_R,cons_L,cons_R,truth_array)
+            loss, grads = jax.value_and_grad(jit(warm_loss),argnums=(0))(params,cons_L,cons_R,truth_array)
             updates, opt_state = jit(optimizer.update)(grads, opt_state)
             params = jit(optax.apply_updates)(params, updates)
             
