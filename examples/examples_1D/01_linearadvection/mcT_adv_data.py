@@ -74,6 +74,10 @@ class Data():
                 case_setup = setup.cases.next()
                 num_setup = setup.numerical
 
+                self.check_sims()
+                if self.size() < setup.num_train:
+                    case_setup['general']['end_time'] = setup.t_max/100
+
                 input_reader = InputReader(case_setup, num_setup)
                 initializer  = Initializer(input_reader)
                 sim_manager  = SimulationManager(input_reader)

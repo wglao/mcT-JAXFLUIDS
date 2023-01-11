@@ -1,5 +1,5 @@
 from typing import Union, Tuple, NamedTuple, Optional, Iterable
-import os, functools, sys
+import os, functools, sys, copy
 import json
 import pickle
 import wandb
@@ -24,7 +24,7 @@ proj = functools.partial(os.path.join,os.environ["PROJ"])
 save_path = proj('data')
 parallel_flag = False
 
-# data only
+# data only = False, False
 mc_flag = False
 noise_flag = False
 
@@ -36,7 +36,7 @@ case_name = 'mcT_adv'
 u = 1.0
 
 t_max = 2.0
-nt = 200
+nt = 2000
 dt = t_max/nt
 
 x_max = 2.0
@@ -58,16 +58,16 @@ ns = 1
 nr = 1
 
 num_epochs = int(50)
-learning_rate = 1e-7
-batch_size = nt-ns-1
+learning_rate = 1e-4
+batch_size = 4
 layers = 1
 
 # sample set size
-num_train = 100
+num_train = 10
 num_test = 10
 
 # define batch by number of sequences trained on, instead of samples
-train_seqs = int(nt-ns-1)
+train_seqs = int(np.floor((nt-ns-1)/100))
 num_batches = int(np.ceil(train_seqs/batch_size))
 
 # edit case setup
@@ -125,7 +125,7 @@ def pos_coefs(seed: int, out_shape: Union[tuple,int]) -> jnp.ndarray:
 def get_cases() -> Cases:
     case_list = []
     for seed in seeds_to_gen:
-        case_new = case_base
+        case_new = copy.deepcopy(case_base)
         coefs = pos_coefs(seed,5)
         rho0 = "lambda x: 1+"+\
             "((x>=0.2) & (x<=0.4)) * ( {0}*(np.exp(-334.477 * (x-0.3-0.005)**2) + np.exp(-334.477 * (x - 0.3 + 0.005)**2) + 4 * np.exp(-334.477 * (x - 0.3)**2))) + "+\
