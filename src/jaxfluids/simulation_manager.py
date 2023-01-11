@@ -611,7 +611,7 @@ class SimulationManager:
         current_step = 0
 
         # LOOP OVER STEPS
-        for step in jnp.arange(n_steps):
+        for step in range(n_steps):
             if self.input_reader.levelset_type != None:
                 reinitialize = True if current_step % self.levelset_handler.interval_reinitialization == 0 else False
             else:

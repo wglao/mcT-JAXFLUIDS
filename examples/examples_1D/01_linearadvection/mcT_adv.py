@@ -135,25 +135,24 @@ def get_loss_batch(params: hk.Params, sample:jnp.ndarray, sim: dat.Sim, seed: in
     input_reader = InputReader(coarse_case,coarse_num)
     sim_manager = SimulationManager(input_reader)
 
-    ml_pred_arr = jnp.zeros_like(sample)
-    ml_primes_init = sample[:,:,:-1,...]
-    ml_primes_init = jnp.moveaxis(ml_primes_init,2,1)
+    ml_primes_init = sample[:,:,0,...]
+    # ml_primes_init = jnp.moveaxis(ml_primes_init,2,1)
     if setup.noise_flag:
-        ml_primes_init = vmap(vmap(add_noise, in_axes=(0,None)),in_axes=(0,None))(ml_primes_init,seed)
+        ml_primes_init = vmap(add_noise, in_axes=(0,None))(ml_primes_init,seed)
 
-    feed_forward_batch = vmap(sim_manager.feed_forward, in_axes=(0,None,None,None,None,None,None,None), out_axes=(0,0))
 
-    ml_pred_arr, _ = feed_forward_batch(
+    # feed_forward_batch = vmap(sim_manager.feed_forward, in_axes=(0,None,None,None,None,None,None,None), out_axes=(0,0))
+    ml_pred_arr, _ = sim_manager.feed_forward(
         ml_primes_init,
         None, # not needed for single-phase, but is a required arg for feed_forward
-        1,
+        setup.ns+1,
         coarse_case['general']['save_dt'],
         0.0, 1,
         ml_parameters_dict,
         ml_networks_dict
     )
-    ml_pred_arr = jnp.array(ml_pred_arr[1])
-    ml_pred_arr = jnp.swapaxes(ml_pred_arr,1,2)
+    ml_pred_arr = jnp.array(ml_pred_arr[1:])
+    ml_pred_arr = jnp.moveaxis(ml_pred_arr,0,2)
 
     # ml loss
     ml_loss_batch = mse(ml_pred_arr, sample[:,:,1:,...])
@@ -210,22 +209,30 @@ def _evaluate_sample(params: hk.Params, sample: jnp.ndarray) -> jnp.ndarray:
     ml_networks_dict = hk.data_structures.to_immutable_dict({"riemann_solver": net})
 
     input_reader = InputReader(coarse_case,coarse_num)
-    initializer = Initializer(input_reader)
     sim_manager = SimulationManager(input_reader)
-    buffer_dictionary = initializer.initialization()
-    buffer_dictionary['machinelearning_modules'] = {
-        'ml_parameters_dict': ml_parameters_dict,
-        'ml_networks_dict': ml_networks_dict
-    }
-    try:
-        sim_manager.simulate(buffer_dictionary)
 
-        # get error
-        path = sim_manager.output_writer.save_path_domain
-        quantities = ['density','velocityX','velocityY','velocityZ','pressure']
-        _, _, _, data_dict_mcT = load_data(path, quantities)
-        mcT_pred = jnp.array([data_dict_mcT[quant] for quant in data_dict_mcT.keys()])
-        err_sample = mse(mcT_pred, sample)
+    try:
+        ml_primes_init = sample[:,0,...]
+        ml_primes_init = jnp.reshape(ml_primes_init,(1,5,setup.nx,1,1))
+        # ml_primes_init = jnp.moveaxis(ml_primes_init,2,1)
+
+        # feed_forward_batch = vmap(sim_manager.feed_forward, in_axes=(0,None,None,None,None,None,None,None), out_axes=(0,0))
+        ml_pred_arr, _ = sim_manager.feed_forward(
+            ml_primes_init,
+            None, # not needed for single-phase, but is a required arg for feed_forward
+            setup.nt,
+            coarse_case['general']['save_dt'],
+            0.0, 1,
+            ml_parameters_dict,
+            ml_networks_dict
+        )
+        ml_pred_arr = jnp.array(ml_pred_arr[1:])
+        ml_pred_arr = jnp.moveaxis(ml_pred_arr,0,2)
+
+        # ml loss
+        err_sample = mse(ml_pred_arr, sample[:,1:,...])
+
+        return err_sample
     except:
         err_sample = jnp.array([sys.float_info.max])
 
@@ -241,7 +248,7 @@ def evaluate(params: hk.Params, data: jnp.ndarray) -> float:
 
     ----- inputs -----\n
     :param state: holds parameters of the NN
-    :param data: downsampled testing data, of shape [samples, primes, sequences, timesteps, xs]
+    :param data: downsampled testing data, of shape [samples, primes, timesteps, xs(, ys, zs)]
 
 
     ----- returns -----\n
