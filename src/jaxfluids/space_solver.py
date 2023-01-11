@@ -151,7 +151,7 @@ class SpaceSolver:
             # CONVECTIVE CONTRIBUTION
             if self.is_convective_flux:
                 flux_xi += self.flux_computer.compute_convective_flux_xi(primes, cons, axis, ml_parameters_dict, ml_networks_dict)
-                if self.flux_computer.flux_computer.riemann_solver == mcTangentNN:
+                if type(self.flux_computer.flux_computer.riemann_solver) == mcTangentNN:
                     flux_xi /= self.one_cell_size[axis]
             
             # # VISCOUS CONTRIBUTION
