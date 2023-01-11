@@ -36,7 +36,7 @@ case_name = 'mcT_adv'
 u = 1.0
 
 t_max = 2.0
-nt = 2000
+nt = 200
 dt = t_max/nt
 
 x_max = 2.0
