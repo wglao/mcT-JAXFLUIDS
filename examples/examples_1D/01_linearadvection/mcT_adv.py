@@ -232,7 +232,7 @@ def _evaluate_sample(params: hk.Params, sample: jnp.ndarray) -> jnp.ndarray:
     # clean
     os.system('rm -rf {}/*'.format(test_path))
 
-    return err_sample if not jnp.isnan(err_sample) and not jnp.isinf(err_sample) else sys.float_info.max
+    return err_sample if not jnp.isnan(err_sample) and not jnp.isinf(err_sample) else jnp.array(sys.float_info.max)
 
 # @jit
 def evaluate(params: hk.Params, data: jnp.ndarray) -> float:
