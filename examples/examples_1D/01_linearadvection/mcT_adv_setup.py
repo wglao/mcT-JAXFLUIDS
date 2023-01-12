@@ -65,7 +65,7 @@ batch_size = 4
 layers = 1
 
 # sample set size
-num_train = 9
+num_train = 10
 num_test = 1
 
 # define batch by number of sequences trained on, instead of samples
