@@ -35,8 +35,11 @@ class Data():
         self.check_sims()
 
     def check_sims(self) -> list:
-        self.sims = os.listdir(self.save_path)
-        self.sims.sort()
+        sim_list = os.listdir(self.save_path)
+        sim_files = [os.path.join(self.save_path,sim) for sim in sim_list]
+        sim_files.sort(key=lambda x: os.path.getmtime(x),reverse=True)
+        sim_list = [os.path.split(sf)[1] for sf in sim_files]
+        self.sims = sim_list
 
     def size(self) -> int:
         return len(self.sims)
@@ -87,19 +90,14 @@ class Data():
         del setup.cases
     
     def _load(self, sim: Sim):
-        out = np.zeros((5,setup.nt+1,setup.nx_fine,setup.ny_fine,setup.nz_fine))
-        quantities = ['density','velocityX','velocityY','velocityZ','pressure']
-        _,_,_, data_dict = load_data(sim.domain,quantities)
-        for ii, quant in enumerate(quantities):
-            out[ii,...] = data_dict[quant]
-        return out
+        return sim.load()[3]
 
     def load_all(self):
         data_train = np.zeros((setup.num_train,5,setup.nt+1,setup.nx_fine,setup.ny_fine,setup.nz_fine))
         for ii in range(setup.num_train):
             data_train[ii,...] = self._load(self.next_sim())
 
-        data_test = np.zeros((setup.num_test,5,setup.nt+1,setup.nx_fine,setup.ny_fine,setup.nz_fine))
+        data_test = np.zeros((setup.num_test,5,setup.nt*100+1,setup.nx_fine,setup.ny_fine,setup.nz_fine))
         for ii in range(setup.num_test):
             data_test[ii,...] = self._load(self.next_sim())
 
