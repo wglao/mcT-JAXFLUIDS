@@ -26,10 +26,10 @@ parallel_flag = False
 
 # data only = False, False
 mc_flag = False
-noise_flag = False
+noise_flag = True
 
 # use warm params
-load_warm = True
+load_warm = False
 
 case_name = 'mcT_adv'
 
