@@ -373,7 +373,7 @@ def update(params: hk.Params, opt_state: optax.OptState, data: jnp.ndarray) -> T
     # loop through data to lower memory cost
     loss = 0
     for ii in range(setup.num_batches):
-        data = lax.dynamic_index_in_dim(data,ii*setup.batch_size,setup.batch_size)
+        data = lax.dynamic_slice_in_dim(data,ii*setup.batch_size,setup.batch_size)
         data = jnp.swapaxes(data,1,2)
         loss_batch = 0
         grad_batch = {}
