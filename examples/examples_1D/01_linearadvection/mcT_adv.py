@@ -119,7 +119,7 @@ def get_rseqs(k_pred: jnp.ndarray) -> jnp.ndarray:
     ----- returns -----\n
     :return rseqs: resequenced prediction, of shape [ns+nr, nr, 5, xs(, ys, zs)]
     """
-    n_rseq = setup.ns+setup.nr
+    n_rseq = setup.ns+setup.nr+1
     rseqs = jnp.zeros((n_rseq,setup.nr,5,setup.nx,1,1))
     for i in range(n_rseq):
         rseq_i = lax.dynamic_slice_in_dim(k_pred,i,setup.nr)
@@ -413,9 +413,7 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
         
         train_coarse = jit(vmap(jit(vmap(get_coarse, in_axes=(0,))),in_axes=(0,)))(data_train)
         test_coarse = jit(vmap(jit(vmap(get_coarse, in_axes=(0,))),in_axes=(0,)))(data_test)
-        # train_coarse = vmap(vmap(get_coarse, in_axes=(0,)),in_axes=(0,))(data_train)
-        # test_coarse = vmap(vmap(get_coarse, in_axes=(0,)),in_axes=(0,))(data_test)
-
+        
         # sequence data
         train_seq = jnp.array([train_coarse[:,:, ii:(ii+setup.ns+2), ...] for ii in range(setup.nt-setup.ns-1)])
         train_seq = jnp.moveaxis(train_seq,0,2)
