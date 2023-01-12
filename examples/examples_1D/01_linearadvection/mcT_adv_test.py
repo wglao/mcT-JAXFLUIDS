@@ -8,8 +8,8 @@ from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm  # Colour map
 import matplotlib.animation as animatio
 import matplotlib.font_manager
-params = {'legend.fontsize': 14, 'axes.labelsize': 16, 'axes.titlesize': 20, 'xtick.labelsize': 14, 'ytick.labelsize': 14}
-pylab.rcParams.update(params)
+figparams = {'legend.fontsize': 14, 'axes.labelsize': 16, 'axes.titlesize': 20, 'xtick.labelsize': 14, 'ytick.labelsize': 14}
+pylab.rcParams.update(figparams)
 matplotlib.rcParams['mathtext.fontset'] = 'cm'
 matplotlib.rcParams['mathtext.rm'] = 'serif'
 plt.rcParams['font.family'] = 'TimesNewRoman'
@@ -41,7 +41,7 @@ from mcT_adv import *
 cache_path = '.test_cache'
 rng = [jrand.PRNGKey(i) for i in range(10)]
 os.makedirs(cache_path,exist_ok=True)
-data_init = jnp.empty((1,setup.nx+1,1,1))
+data_init = jnp.empty((5,setup.nx+1,1,1))
 optimizer = optax.adam(setup.learning_rate)
 initial_params = net.init(rng.pop(), data_init)
 initial_opt_state = optimizer.init(initial_params)
@@ -68,24 +68,24 @@ print('Load time: %s s' %(t2-t1))
 print('\n','-'*10,'Single Sample Load Pass','-'*10,'\n')
 
 t1 = time.time()
-test, train = dat.data.load_all()
+train, test = dat.data.load_all()
 t2 = time.time()
 dat.data.check_sims() 
 print('\n')
 
 try:
-    jnp.reshape(test,(setup.num_test, 5,setup.nt+1,setup.nx_fine,setup.ny_fine,setup.nz_fine))
+    jnp.reshape(train,(setup.num_train,5,setup.nt+1,setup.nx_fine,setup.ny_fine,setup.nz_fine))
 except:
-    raise "\nTest data is of incorrect shape. Loaded array with shape %s" %(test.shape)
+    raise f"\nTrain data is of incorrect shape. Loaded array with shape {train.shape}"
 try:
-    jnp.reshape(train,(setup.num_train, 5,setup.nt+1,setup.nx_fine,setup.ny_fine,setup.nz_fine))
+    jnp.reshape(test,(setup.num_test,5,100*setup.nt+1,setup.nx_fine,setup.ny_fine,setup.nz_fine))
 except:
-    raise "\nTrain data is of incorrect shape. Loaded array with shape %s" %(train.shape)
+    raise f"\nTest data is of incorrect shape. Loaded array with shape {test.shape}"
 
 print('\nData loaded, with shapes: \n{0}, \n{1}'.format(*[test.shape, train.shape]))
 print('Load time: %s s' %(t2-t1))
 
-del test, train
+del test
 print('\n','-'*10,'Load All Pass','-'*10,'\n')
 
 # %% save and load params
@@ -127,15 +127,16 @@ print('\n','-'*10,'MSE Pass','-'*10,'\n')
 if setup.noise_flag:
     xs = jnp.linspace(0,1,5)
     pure = jnp.sinc(xs*2*jnp.pi)
+    pure = jnp.array([pure]*5)
 
     t1 = time.time()
     noisy = add_noise(pure,1)
     t2 = time.time()
 
-    err = mse(noisy, pure)/mse(pure)
+    err = jnp.sqrt(mse(noisy, pure))/jnp.max(pure)
     print('True Sinc(2*pi*x): %s' %pure)
     print('Noisy Sinc(2*pi*x): %s' %noisy)
-    print('Average Error: %s' %err)
+    print('Mean Relative Error: %s' %err)
 
     print('Noise Level: %s, time: %s s' %(setup.noise_level, t2-t1))
 
@@ -147,61 +148,71 @@ if setup.noise_flag:
 print('\n','-'*10,'Add Noise Pass','-'*10,'\n')
 
 # %% NN
-state = jrand.normal(rng.pop(),(1,setup.nx+1,1,1))+1
+state = jrand.normal(rng.pop(),(5,setup.nx+1,1,1))+1
 t1 = time.time()
-flux = net.apply(initial_params,state)
+tangent = net.apply(initial_params,state)
 t2 = time.time()
 
-print('Flux Shape: {}'.format(flux.shape),'\ntime: %s s' %(t2-t1))
-print(type(flux))
+print('Tagent Manifold Shape: {}'.format(tangent.shape),'\ntime: %s s' %(t2-t1))
+print(type(tangent))
 
 try:
-    jnp.reshape(flux,state.shape)
+    jnp.reshape(tangent,state.shape)
 except:
     raise "NN Apply failed"
 
-if type(flux) == None:
+if type(tangent) == None:
     raise "NN Apply failed"
 
-del state, flux
+del state, tangent
 print('\n','-'*10,'NN Apply Pass','-'*10,'\n')
 
 # %% ML Loss
 sim = dat.data.next_sim()
 _,_,_, data = sim.load()
-data_coarse = get_coarse(data)
-data_coarse = jax.device_get(data_coarse)
-data_coarse = np.reshape(data_coarse,(5,setup.nt+1,setup.nx,1,1))
-data_seq = np.array([data_coarse[:, ii:(ii+setup.ns+2), ...] for ii in range(setup.nt-setup.ns-1)])
+data_coarse = jit(vmap(get_coarse, in_axes=(0,)))(data)
+data_seq = jnp.array([data_coarse[:, ii:(ii+setup.ns+2), ...] for ii in range(setup.nt-setup.ns-1)])
+# data_seq = jnp.moveaxis(data_seq,0,1)
 del data
-dat.data.check_sims()
 
 setup.mc_flag = False
-sample = lax.dynamic_slice_in_dim(data_seq,0,setup.batch_size)
 t1 = time.time()
-loss = get_loss_batch(initial_params, sample)
+loss_ml, grads_ml = value_and_grad(get_loss_sample, argnums=0, allow_int=True)(initial_params, data_seq, sim, 1)
 t2 = time.time()
 
-print('\nLoss: %s' %loss, type(loss))
+print('\nLoss: %s' %loss_ml, type(loss_ml))
 print('time: %s s' %(t2-t1))
 
-if loss.dtype != jnp.dtype('float64') or loss._value.max == jnp.nan:
+if loss_ml.dtype != jnp.dtype('float64') or jnp.sum(jnp.isnan(loss_ml._value)) > 0:
     raise "ML Loss function failed"
+
+for layer in grads_ml.keys():
+    for wb in grads_ml[layer].keys():
+        arr = grads_ml[layer][wb]
+        if arr.dtype != jnp.dtype('float64') or jnp.sum(jnp.isnan(arr._value)) > 0:
+            raise "MC Loss function failed: invalid grads"
 
 
 print('\n','-'*10,'ML Loss Function Pass','-'*10,'\n')
 
 # %% MC Loss
 setup.mc_flag = True
+setup.mc_alpha = 1e5
 t1 = time.time()
-loss_mc, grads_mc = value_and_grad(get_loss_batch, argnums=0, allow_int=True)(initial_params, sample)
+loss_mc, grads_mc = value_and_grad(get_loss_sample, argnums=0, allow_int=True)(initial_params, data_seq, sim, 1)
 t2 = time.time()
 
-print('\nLoss: %s' %loss, type(loss))
+print('\nLoss: %s' %loss_mc, type(loss_mc))
 print('time: %s s' %(t2-t1))
 
-if loss.dtype != jnp.dtype('float64') or loss._value.max == jnp.nan:
-    raise "MC Loss function failed"
+if loss_mc.dtype != jnp.dtype('float64') or jnp.sum(jnp.isnan(loss_mc._value)) > 0:
+    raise "MC Loss function failed: invalid loss"
+
+for layer in grads_mc.keys():
+    for wb in grads_mc[layer].keys():
+        arr = grads_mc[layer][wb]
+        if arr.dtype != jnp.dtype('float64') or jnp.sum(jnp.isnan(arr._value)) > 0:
+            raise "MC Loss function failed: invalid grads"
 
 print('\n','-'*10,'MC Loss Function Pass','-'*10,'\n')
 
@@ -238,8 +249,13 @@ if err.dtype != jnp.dtype('float64') or jnp.isnan(err):
 print('\n','-'*10,'Evaluate Function Pass','-'*10,'\n')
 
 # %% Update
-sample = jnp.moveaxis(data_seq,0,1)
-sample = jnp.reshape(sample,(1,5,setup.nt-setup.ns-1,setup.ns+2,setup.nx,1,1))
+train_coarse = jit(vmap(jit(vmap(get_coarse, in_axes=(0,))),in_axes=(0,)))(train)
+
+# sequence data
+train_seq = jnp.array([train_coarse[:,:, ii:(ii+setup.ns+2), ...] for ii in range(setup.nt-setup.ns-1)])
+train_seq = jnp.moveaxis(train_seq,0,2)
+del train_coarse
+
 if setup.parallel_flag:
     data_batch = np.array_split(data_seq, setup.num_batches)
     n_dev = jax.local_device_count()
@@ -268,7 +284,7 @@ if setup.parallel_flag:
 
 else:
     t1 = time.time()
-    params_new, opt_state_new, loss_new = update(initial_params,initial_opt_state,sample)
+    params_new, opt_state_new, loss_new = update(initial_params,initial_opt_state,train_seq)
     t2 = time.time()
 
     print("Types of updated state:")

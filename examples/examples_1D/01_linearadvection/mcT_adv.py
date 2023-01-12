@@ -179,7 +179,7 @@ def get_loss_sample(params: hk.Params, sample:jnp.ndarray, sim: dat.Sim, seed: i
     
     # mc loss
     # ff R additional steps
-    min_rho = jnp.min(ml_primes_init[:,0,...])
+    min_rho = jnp.min(sample[0,0,0,...])
     ml_primes_init_R = ml_pred_arr[:,:,-1,...]
 
     ml_pred_arr_R, _ = sim_manager.feed_forward(
@@ -217,6 +217,10 @@ def get_loss_sample(params: hk.Params, sample:jnp.ndarray, sim: dat.Sim, seed: i
     mc_primes_init = mc_primes_init.at[:,1,...].set(jnp.ones_like(mc_primes_init[:,1,...]))
     mc_primes_init = mc_primes_init.at[:,2:3,...].set(jnp.zeros_like(mc_primes_init[:,2:3,...]))
     mc_primes_init = mc_primes_init.at[:,4,...].set(jnp.ones_like(mc_primes_init[:,4,...]))
+    # for ii, primes in enumerate(mc_primes_init):
+    #     plt.plot(jnp.linspace(*coarse_case['domain']['x']['range'],num=coarse_case['domain']['x']['cells']),jax.device_get(jnp.concatenate(primes[0],axis=None)).primal)
+    #     plt.title(f"{ii+1} / {mc_primes_init.shape[0]}")
+    #     plt.show()
     # print(jnp.sum(mc_primes_init[:,0,...].primal<=0))
     # print(jnp.sum(mc_primes_init[:,2:3,...].primal!=0))
     # print(jnp.sum(mc_primes_init[:,4,...].primal<=0))
@@ -414,6 +418,18 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
         train_coarse = jit(vmap(jit(vmap(get_coarse, in_axes=(0,))),in_axes=(0,)))(data_train)
         test_coarse = jit(vmap(jit(vmap(get_coarse, in_axes=(0,))),in_axes=(0,)))(data_test)
         
+        fig = plt.figure()
+        fig.add_subplot(2,1,1)
+        plt.plot(jnp.linspace(0,2,setup.nx_fine),jnp.concatenate(data_train[0,0,0],axis=None),label='Init Fine')
+        plt.plot(jnp.linspace(0,2,setup.nx_fine),jnp.concatenate(data_train[0,0,int(setup.nt/2)],axis=None),label=f't={setup.nt*setup.dt/2} Fine')
+        plt.plot(jnp.linspace(0,2,setup.nx_fine),jnp.concatenate(data_train[0,0,-1],axis=None),label='Final Fine')
+
+        fig.add_subplot(2,1,2)
+        plt.plot(jnp.linspace(0,2,setup.nx),jnp.concatenate(train_coarse[0,0,0],axis=None),label='Init Coarse')
+        plt.plot(jnp.linspace(0,2,setup.nx),jnp.concatenate(train_coarse[0,0,int(setup.nt/2)],axis=None),label=f't={setup.nt*setup.dt/2} Coarse')
+        plt.plot(jnp.linspace(0,2,setup.nx),jnp.concatenate(train_coarse[0,0,-1],axis=None),label='Final Coarse')
+        fig.legend()
+        plt.show()
         # sequence data
         train_seq = jnp.array([train_coarse[:,:, ii:(ii+setup.ns+2), ...] for ii in range(setup.nt-setup.ns-1)])
         train_seq = jnp.moveaxis(train_seq,0,2)

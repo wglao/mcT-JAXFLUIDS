@@ -15,7 +15,7 @@ from jax.config import config
 """debugging and config"""
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 # os.environ["XLA_FLAGS"] = "--xla_dump_to=/tmp/foo"
-config.update("jax_debug_nans", True)
+config.update("jax_debug_nans", False)
 config.update("jax_disable_jit", False)
 config.update("jax_enable_x64", True)
 
@@ -25,7 +25,7 @@ save_path = proj('data')
 parallel_flag = False
 
 # data only = False, False
-mc_flag = False
+mc_flag = True
 noise_flag = True
 
 # use warm params
