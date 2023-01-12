@@ -56,7 +56,7 @@ assert cfl <= 1, "Bad CFL Condition for Implicit Solvers"
 
 mc_alpha = 1e5 if mc_flag else 0
 noise_level = 0.02 if noise_flag else 0
-ns = 1
+ns = 10
 nr = 1
 
 num_epochs = int(50)
