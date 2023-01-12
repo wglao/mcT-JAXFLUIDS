@@ -13,7 +13,7 @@ from jax import jit
 from jax.config import config
 
 """debugging and config"""
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "true"
 # os.environ["XLA_FLAGS"] = "--xla_dump_to=/tmp/foo"
 config.update("jax_debug_nans", False)
 config.update("jax_disable_jit", False)
@@ -57,7 +57,7 @@ assert cfl <= 1, "Bad CFL Condition for Implicit Solvers"
 mc_alpha = 1e5 if mc_flag else 0
 noise_level = 0.02 if noise_flag else 0
 ns = 1
-nr = 10
+nr = 1
 
 num_epochs = int(50)
 learning_rate = 1e-4
@@ -67,7 +67,7 @@ layers = 1
 # sample set size
 num_train = 10
 num_test = 1
-test_ratio = 10
+test_ratio = 1
 
 # define batch by number of sequences trained on, instead of samples
 num_batches = int(np.ceil(num_train/batch_size))
