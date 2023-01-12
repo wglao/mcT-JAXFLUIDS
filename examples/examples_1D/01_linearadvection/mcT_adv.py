@@ -236,8 +236,8 @@ def get_loss_sample(params: hk.Params, sample:jnp.ndarray, sim: dat.Sim, seed: i
         ml_parameters_dict,
         ml_networks_dict
     )
-    # mc_pred_arr = jnp.nan_to_num(mc_pred_arr)
     mc_pred_arr = jnp.array(mc_pred_arr[1:])
+    mc_pred_arr = jnp.nan_to_num(mc_pred_arr)
     mc_pred_arr = jnp.moveaxis(mc_pred_arr,0,2)
     # mc_rseqs = vmap(get_rseqs,in_axes=(0,))(mc_pred_arr)
 
@@ -289,6 +289,7 @@ def _evaluate_sample(params: hk.Params, sample: jnp.ndarray, sim: dat.Sim) -> jn
         ml_networks_dict
     )
     ml_pred_arr = jnp.array(ml_pred_arr[1:])
+    ml_pred_arr = jnp.nan_to_num(ml_pred_arr)
     ml_pred_arr = jnp.moveaxis(ml_pred_arr,0,2)
 
     # ml loss
@@ -385,6 +386,9 @@ def update(params: hk.Params, opt_state: optax.OptState, data: jnp.ndarray) -> T
 
         for jj, (sample, sim) in enumerate(zip(batch, sims_batch)):
             loss_sample, grad_sample = value_and_grad(get_loss_sample, argnums=0)(params, sample, sim, 1+jj+ii*setup.batch_size)
+            for layer in grad_sample.keys():
+                for wb in grad_sample[layer].keys():
+                    grad_sample[layer][wb] = jnp.nan_to_num(grad_sample[layer][wb])
             loss_batch, grad_batch = cumulate(loss_batch, loss_sample, grad_batch, grad_sample, data.shape[0])
 
         updates, opt_state = jit(optimizer.update)(grad_batch, opt_state)
