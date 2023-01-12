@@ -372,10 +372,9 @@ def update(params: hk.Params, opt_state: optax.OptState, data: jnp.ndarray) -> T
     """
     # loop through data to lower memory cost
     loss = 0
-    grads = {}
     for ii in range(setup.num_batches):
         data = lax.dynamic_index_in_dim(data,ii*setup.batch_size,setup.batch_size)
-        sample = jnp.swapaxes(sample,0,1)
+        data = jnp.swapaxes(data,1,2)
         loss_batch = 0
         grad_batch = {}
 
@@ -386,7 +385,7 @@ def update(params: hk.Params, opt_state: optax.OptState, data: jnp.ndarray) -> T
 
         updates, opt_state = jit(optimizer.update)(grad_batch, opt_state)
         params = jit(optax.apply_updates)(params, updates)
-        loss, grads = cumulate(loss, loss_sample, grads, grad_sample, data.shape[0])
+        loss, _ = cumulate(loss, loss_batch, {}, {}, setup.num_batches)
 
     return params, opt_state, loss
 
