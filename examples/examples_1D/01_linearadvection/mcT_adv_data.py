@@ -82,7 +82,7 @@ class Data():
 
                 self.check_sims()
                 if self.size() >= setup.num_train:
-                    case_setup['general']['end_time'] = setup.t_max*10
+                    case_setup['general']['end_time'] = setup.t_max*setup.test_ratio
 
                 input_reader = InputReader(case_setup, num_setup)
                 initializer  = Initializer(input_reader)
@@ -100,7 +100,7 @@ class Data():
         for ii in range(setup.num_train):
             data_train[ii,...] = self._load(self.next_sim())
 
-        data_test = np.zeros((setup.num_test,5,setup.nt*100+1,setup.nx_fine,setup.ny_fine,setup.nz_fine))
+        data_test = np.zeros((setup.num_test,5,setup.nt*setup.test_ratio+1,setup.nx_fine,setup.ny_fine,setup.nz_fine))
         for ii in range(setup.num_test):
             data_test[ii,...] = self._load(self.next_sim())
 
