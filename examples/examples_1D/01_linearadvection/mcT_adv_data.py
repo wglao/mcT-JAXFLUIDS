@@ -37,7 +37,7 @@ class Data():
     def check_sims(self) -> list:
         sim_list = os.listdir(self.save_path)
         sim_files = [os.path.join(self.save_path,sim) for sim in sim_list]
-        sim_files.sort(key=lambda x: os.path.getmtime(x),reverse=True)
+        sim_files.sort(key=lambda x: os.path.getmtime(x), reverse=False)
         sim_list = [os.path.split(sf)[1] for sf in sim_files]
         self.sims = sim_list
 
@@ -45,10 +45,11 @@ class Data():
         return len(self.sims)
 
     def next_sim(self) -> Sim:
-
-        sim_path = self.sims.pop()
+        
+        # takes sim out of queue and puts it at the back
+        sim_path = self.sims.pop(0)
         # cycle sim to other end of list
-        self.sims = [sim_path] + self.sims
+        self.sims.append(sim_path)
         
         sim_name = re.split(r'-\d+',sim_path)[0] if re.split(r'-\d+',sim_path) else sim_path
         domain = os.path.join(self.save_path,sim_path,'domain')

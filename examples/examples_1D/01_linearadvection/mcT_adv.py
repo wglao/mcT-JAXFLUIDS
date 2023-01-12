@@ -242,7 +242,7 @@ def get_loss_sample(params: hk.Params, sample:jnp.ndarray, sim: dat.Sim, seed: i
     return loss_sample
 
 # @jit
-def _evaluate_sample(params: hk.Params, sample: jnp.ndarray) -> jnp.ndarray:
+def _evaluate_sample(params: hk.Params, sample: jnp.ndarray, sim: dat.Sim) -> jnp.ndarray:
     """
     creates a simulation manager to fully simulate the case using the updated mcTangent
     the resulting data is then loaded and used to calculate the mse across all test data
@@ -250,11 +250,11 @@ def _evaluate_sample(params: hk.Params, sample: jnp.ndarray) -> jnp.ndarray:
     ----- inputs -----\n
     :param params: holds parameters of the NN
     :param sample: sample of data to be used for validation, of shape [primes, sequences, timesteps, xs]
+    :param sim: contains simulation data
 
     ----- returns -----\n
     :return err_sample: mean squared error for the sample
     """
-    sim = dat.data.next_sim()
     # feed forward with mcTangent ns+1 steps
     coarse_case = sim.case
     coarse_num = sim.numerical
@@ -270,30 +270,27 @@ def _evaluate_sample(params: hk.Params, sample: jnp.ndarray) -> jnp.ndarray:
     input_reader = InputReader(coarse_case,coarse_num)
     sim_manager = SimulationManager(input_reader)
 
-    try:
-        ml_primes_init = sample[:,0,...]
-        ml_primes_init = jnp.reshape(ml_primes_init,(1,5,setup.nx,1,1))
-        # ml_primes_init = jnp.moveaxis(ml_primes_init,2,1)
+    ml_primes_init = sample[:,0,...]
+    ml_primes_init = jnp.reshape(ml_primes_init,(1,5,setup.nx,1,1))
+    # ml_primes_init = jnp.moveaxis(ml_primes_init,2,1)
 
-        # feed_forward_batch = vmap(sim_manager.feed_forward, in_axes=(0,None,None,None,None,None,None,None), out_axes=(0,0))
-        ml_pred_arr, _ = sim_manager.feed_forward(
-            ml_primes_init,
-            None, # not needed for single-phase, but is a required arg for feed_forward
-            setup.nt,
-            coarse_case['general']['save_dt'],
-            0.0, 1,
-            ml_parameters_dict,
-            ml_networks_dict
-        )
-        ml_pred_arr = jnp.array(ml_pred_arr[1:])
-        ml_pred_arr = jnp.moveaxis(ml_pred_arr,0,2)
+    # feed_forward_batch = vmap(sim_manager.feed_forward, in_axes=(0,None,None,None,None,None,None,None), out_axes=(0,0))
+    ml_pred_arr, _ = sim_manager.feed_forward(
+        ml_primes_init,
+        None, # not needed for single-phase, but is a required arg for feed_forward
+        int(float(coarse_case['general']['end_time']) / coarse_case['general']['save_dt']),
+        coarse_case['general']['save_dt'],
+        0.0, 1,
+        ml_parameters_dict,
+        ml_networks_dict
+    )
+    ml_pred_arr = jnp.array(ml_pred_arr[1:])
+    ml_pred_arr = jnp.moveaxis(ml_pred_arr,0,2)
 
-        # ml loss
-        err_sample = mse(ml_pred_arr, sample[:,1:,...])
+    # ml loss
+    err_sample = mse(ml_pred_arr, sample[:,1:,...])
 
-        return err_sample
-    except:
-        err_sample = jnp.array([sys.float_info.max])
+    return err_sample
 
     # clean
     os.system('rm -rf {}/*'.format(test_path))
@@ -314,8 +311,9 @@ def evaluate(params: hk.Params, data: jnp.ndarray) -> float:
     :return err_epoch: mean squared error for the epoch
     """
     err_epoch = 0
-    for sample in data:
-        err_epoch += _evaluate_sample(params,sample)/setup.num_test
+    sims = [dat.data.next_sim() for _ in range(setup.num_test)]
+    for sample, sim in zip(data, sims):
+        err_epoch += _evaluate_sample(params,sample,sim)/setup.num_test
     # err_epoch = vmap(_evaluate_sample, in_axes=(None,0))(params, data)
     return err_epoch if not jnp.isnan(err_epoch) and not jnp.isinf(err_epoch) else jnp.array(sys.float_info.max)
 
@@ -372,15 +370,17 @@ def update(params: hk.Params, opt_state: optax.OptState, data: jnp.ndarray) -> T
     """
     # loop through data to lower memory cost
     loss = 0
+    sims = [dat.data.next_sim() for _ in range(setup.num_train)]
     for ii in range(setup.num_batches):
-        data = lax.dynamic_slice_in_dim(data,ii*setup.batch_size,setup.batch_size)
-        data = jnp.swapaxes(data,1,2)
+        batch = lax.dynamic_slice_in_dim(data,ii*setup.batch_size,setup.batch_size)
+        batch = jnp.swapaxes(batch,1,2)
         loss_batch = 0
         grad_batch = {}
+        sim_batch_index = lax.dynamic_slice_in_dim(jnp.arange(setup.num_train),ii*setup.batch_size,setup.batch_size)
+        sims_batch = sims[sim_batch_index[0]:sim_batch_index[-1]+1]
 
-        for sample in data:
-            sim = dat.data.next_sim()
-            loss_sample, grad_sample = value_and_grad(get_loss_sample, argnums=0)(params, sample, sim, ii)
+        for jj, (sample, sim) in enumerate(zip(batch, sims_batch)):
+            loss_sample, grad_sample = value_and_grad(get_loss_sample, argnums=0)(params, sample, sim, 1+jj+ii*setup.batch_size)
             loss_batch, grad_batch = cumulate(loss_batch, loss_sample, grad_batch, grad_sample, data.shape[0])
 
         updates, opt_state = jit(optimizer.update)(grad_batch, opt_state)
