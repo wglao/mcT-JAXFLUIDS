@@ -1,4 +1,4 @@
-from typing import Tuple, NamedTuple, Iterable
+from typing import Tuple, NamedTuple, Iterable, Union
 import shutil, os, json, re
 import matplotlib.pyplot as plt
 import jax
@@ -16,8 +16,10 @@ class Sim(NamedTuple):
     case: dict
     numerical: dict
 
-    def load(self, quantities: Iterable[str] = ['density','velocityX','velocityY','velocityZ','pressure'], dtype: str = 'ARRAY'):
+    def load(self, quantities: Iterable[str] = ['density','velocityX','velocityY','velocityZ','pressure'], dtype: Union[str, type] = 'ARRAY'):
         out = load_data(self.domain,quantities)
+        if isinstance(dtype,type):
+            dtype = 'DICT' if dtype == dict else 'ARRAY'
         if dtype == 'DICT':
             return out
         if dtype == 'ARRAY':

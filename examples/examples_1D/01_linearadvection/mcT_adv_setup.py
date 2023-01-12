@@ -31,6 +31,8 @@ noise_flag = True
 # use warm params
 load_warm = False
 
+vis_flag = False
+
 case_name = 'mcT_adv'
 
 u = 1.0

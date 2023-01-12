@@ -475,6 +475,127 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
 
     return best_state, state
 
+def run_simulation(case_dict,num_dict,params=None,net=None):
+    input_reader = InputReader(case_dict,num_dict)
+    initializer = Initializer(input_reader)
+    sim_manager = SimulationManager(input_reader)
+    buffer_dictionary = initializer.initialization()
+    buffer_dictionary['machinelearning_modules'] = {
+        'ml_parameters_dict': params,
+        'ml_networks_dict': net
+    }
+    sim_manager.simulate(buffer_dictionary)
+    return sim_manager
+
+def visualize():
+    import matplotlib.pyplot as plt
+    import pandas as pd
+    import matplotlib
+    import matplotlib.pylab as pylab
+    from matplotlib.lines import Line2D
+    from mpl_toolkits.mplot3d import Axes3D
+    from matplotlib import cm  # Colour map
+    import matplotlib.animation as animatio
+    import matplotlib.font_manager
+    params = {'legend.fontsize': 14, 'axes.labelsize': 16, 'axes.titlesize': 20, 'xtick.labelsize': 14, 'ytick.labelsize': 14}
+    pylab.rcParams.update(params)
+    matplotlib.rcParams['mathtext.fontset'] = 'cm'
+    matplotlib.rcParams['mathtext.rm'] = 'serif'
+    plt.rcParams['font.family'] = 'TimesNewRoman'
+    # date
+    now = time.strftime("%d%m%y%H%M")
+    # fine
+    fine_sim = dat.data.next_sim()
+
+    quantities = ['density']
+    x_fine, _, times, data_dict_fine = fine_sim.load(quantities,dict)
+    x_fine = x_fine[0]
+
+    # coarse
+    coarse_case = fine_sim.case
+    coarse_num = fine_sim.numerical
+    coarse_case['general']['save_path'] = results_path
+    coarse_case['domain']['x']['cells'] = setup.nx
+    coarse_num['conservatives']['time_integration']['fixed_timestep'] = setup.dt
+    sim_manager = run_simulation(coarse_case,coarse_num)
+
+    path = sim_manager.output_writer.save_path_domain
+    quantities = ['density']
+    x_coarse, _, _, data_dict_coarse = load_data(path, quantities)
+    x_coarse = x_coarse[0]
+
+    # mcTangent
+    coarse_num['conservatives']['convective_fluxes']['riemann_solver'] = "MCTANGENT"
+
+    # best state, end state
+    params_best = load_params(os.path.join(param_path,"best.pkl"))
+    params_end = load_params(os.path.join(param_path,"end.pkl"))
+
+    ml_parameters_dict = {"riemann_solver":params_best}
+    ml_networks_dict = hk.data_structures.to_immutable_dict({"riemann_solver": net})
+
+    sim_manager = run_simulation(coarse_case,coarse_num,ml_parameters_dict,ml_networks_dict)
+
+    path = sim_manager.output_writer.save_path_domain
+    _, _, _, data_dict_best = load_data(path, quantities)
+
+    ml_parameters_dict = {"riemann_solver":params_end}
+    sim_manager = run_simulation(coarse_case,coarse_num,ml_parameters_dict,ml_networks_dict)
+
+    path = sim_manager.output_writer.save_path_domain
+    _, _, _, data_dict_end = load_data(path, quantities)
+
+    data_true = data_dict_fine['density']
+    data_coarse = data_dict_coarse['density']
+    data_best = data_dict_best['density']
+    data_end = data_dict_end['density']
+
+    n_plot = 3
+    plot_steps = np.linspace(0,data_true.shape[0]-1,n_plot,dtype=int)
+    plot_times = times[plot_steps]
+
+    fig = plt.figure(figsize=(32,10))
+    for nn in range(n_plot):
+        ut = jnp.reshape(data_true[plot_steps[nn]], (setup.nx_fine,))
+        uc = jnp.reshape(data_coarse[plot_steps[nn]], (setup.nx,))
+        uc = jnp.nan_to_num(uc)
+        ub = jnp.reshape(data_best[plot_steps[nn]], (setup.nx,))
+        ub = jnp.nan_to_num(ub)
+        ue = jnp.reshape(data_end[plot_steps[nn]], (setup.nx,))
+        ue = jnp.nan_to_num(ue)
+        
+        ax = fig.add_subplot(1, n_plot, nn+1)
+        l1 = ax.plot(x_fine, ut, '-o', linewidth=2, markevery=0.2, label='True')
+        l2 = ax.plot(x_coarse, uc, '--^', linewidth=2, markevery=(0.05,0.2), label='Coarse')
+        l2 = ax.plot(x_coarse, ub, '--s', linewidth=2, markevery=(0.10,0.2), label='Best')
+        l2 = ax.plot(x_coarse, ue, '--p', linewidth=2, markevery=(0.15,0.2), label='End')
+
+        ax.set_aspect('auto', adjustable='box')
+        ax.set_title('t = ' + str(plot_times[nn]))
+
+        if nn == 0:
+            handles, labels = ax.get_legend_handles_labels()
+            fig.legend(handles, labels)
+
+    # plt.show()
+    fig.savefig(os.path.join('figs',setup.case_name+now+'.png'))
+
+    fig = plt.figure()
+    coarse_true = get_coarse(data_true)
+    err_coarse = vmap(mse,in_axes=(0,0))(coarse_true,data_coarse)
+    err_best = vmap(mse,in_axes=(0,0))(coarse_true,data_best)
+    err_end = vmap(mse,in_axes=(0,0))(coarse_true,data_end)
+    plt.plot(times,err_coarse, '--^', linewidth=2, markevery=0.2, label='Coarse')
+    plt.plot(times,err_best, '--s', linewidth=2, markevery=(0.06,0.2), label='Best')
+    plt.plot(times,err_end, '--p', linewidth=2, markevery=(0.13,0.2), label='End')
+    plt.legend()
+    plt.xlabel('Time')
+    plt.ylabel('MSE')
+    plt.title('Error Over Time')
+
+    # plt.show()
+    fig.savefig(os.path.join('figs',setup.case_name+'_errHist_' + now +'.png'))
+
 # %% main
 if __name__ == "__main__":
     # os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
@@ -513,84 +634,5 @@ if __name__ == "__main__":
     save_params(end_state.params,os.path.join(param_path,"end.pkl"))
 
     # # %% visualize best and end state
-
-    # # fine
-    # fine_sim = dat.data.next_sim()
-
-    # quantities = ['density']
-    # x_fine, _, times, data_dict_fine = load_data(fine_sim.domain, quantities)
-
-    # # coarse
-    # coarse_case = fine_sim.case
-    # coarse_num = fine_sim.numerical
-    # coarse_case['general']['save_path'] = results_path
-    # coarse_case['domain']['x']['cells'] = setup.dx
-    # coarse_num['conservatives']['time_integration']['fixed_timestep'] = setup.dt
-    # input_reader = InputReader(coarse_case,coarse_num)
-    # initializer = Initializer(input_reader)
-    # sim_manager = SimulationManager(input_reader)
-    # buffer_dictionary = initializer.initialization()
-    # sim_manager.simulate(buffer_dictionary)
-
-    # path = sim_manager.output_writer.save_path_domain
-    # quantities = ['density']
-    # x_coarse, _, _, data_dict_coarse = load_data(path, quantities)
-
-    # coarse_num['conservatives']['convective_fluxes']['riemann_solver'] = "MCTANGENT"
-
-    # # best state
-    # params_best = load_params(os.path.join(param_path,"best.pkl"))
-
-    # ml_parameters_dict = {"riemann_solver":params_best}
-    # ml_networks_dict = hk.data_structures.to_immutable_dict({"riemannsolver": net})
-
-    # input_reader = InputReader(coarse_case,coarse_num)
-    # initializer = Initializer(input_reader)
-    # sim_manager = SimulationManager(input_reader)
-    # buffer_dictionary = initializer.initialization()
-    # buffer_dictionary['machinelearning_modules'] = {
-    #     'ml_parameters_dict': ml_parameters_dict,
-    #     'ml_networks_dict': ml_networks_dict
-    # }
-    # sim_manager.simulate(buffer_dictionary)
-
-    # path = sim_manager.output_writer.save_path_domain
-    # _, _, _, data_dict_best = load_data(path, quantities)
-    # # end state
-    # params_end = load_params(os.path.join(param_path,"end.pkl"))
-    # ml_parameters_dict = {"riemann_solver":params_end}
-    # buffer_dictionary['machinelearning_modules']['ml_parameters_dict'] = ml_parameters_dict
-    # sim_manager.simulate(buffer_dictionary)
-
-    # path = sim_manager.output_writer.save_path_domain
-    # _, _, _, data_dict_end = load_data(path, quantities)
-
-    # data_true = data_dict_fine['density']
-    # data_coarse = data_dict_coarse['density']
-    # data_best = data_dict_best['density']
-    # data_end = data_dict_end['density']
-
-    # n_plot = 3
-    # plot_steps = np.linspace(0,setup.nt,n_plot,dtype=int)
-    # plot_times = times[plot_steps]
-
-    # fig = plt.figure(figsize=(32,10))
-    # for nn in range(n_plot):
-    #     ut = jnp.reshape(data_true[plot_steps[nn], :], (4*setup.nx, 1))
-    #     uc = jnp.reshape(data_coarse[plot_steps[nn], :], (setup.nx, 1))
-    #     ub = jnp.reshape(data_best[plot_steps[nn], :], (setup.nx, 1))
-    #     ue = jnp.reshape(data_end[plot_steps[nn], :], (setup.nx, 1))
-    #     ax = fig.add_subplot(1, n_plot, nn+1)
-    #     l1 = ax.plot(x_fine, ut, '-', linewidth=2, label='True')
-    #     l2 = ax.plot(x_coarse, uc, '--', linewidth=2, label='Coarse')
-    #     l2 = ax.plot(x_coarse, ub, '--', linewidth=2, label='Predicted')
-    #     l2 = ax.plot(x_coarse, ue, '--', linewidth=2, label='Predicted')
-    #     ax.set_aspect('auto', adjustable='box')
-    #     ax.set_title('t = ' + str(plot_times[nn]))
-
-    #     if nn == 0:
-    #         handles, labels = ax.get_legend_handles_labels()
-    #         fig.legend(handles, labels, loc='upper center')
-
-    # # plt.show()
-    # fig.savefig(os.path.join('figs',setup.case_name+'.png'))
+    if setup.vis_flag:
+        visualize()
