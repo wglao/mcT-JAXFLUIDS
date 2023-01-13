@@ -61,8 +61,8 @@ ns = 1
 nr = 1
 
 num_epochs = int(50)
-learning_rate = 1e-2
-batch_size = 4
+learning_rate = 1e-7
+batch_size = 5
 layers = 1
 
 # sample set size
