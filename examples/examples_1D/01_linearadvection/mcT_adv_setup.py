@@ -14,6 +14,7 @@ from jax.config import config
 
 """debugging and config"""
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 # os.environ["XLA_FLAGS"] = "--xla_dump_to=/tmp/foo"
 config.update("jax_debug_nans", False)
 config.update("jax_disable_jit", False)
@@ -60,7 +61,7 @@ ns = 1
 nr = 1
 
 num_epochs = int(50)
-learning_rate = 1e-4
+learning_rate = 1e-2
 batch_size = 4
 layers = 1
 
