@@ -293,47 +293,10 @@ def _evaluate_sample(params: hk.Params, sample: jnp.ndarray, sim: dat.Sim) -> jn
     ml_pred_arr = jnp.moveaxis(ml_pred_arr,0,2)
 
     # ml loss
+    ml_pred_arr = jnp.reshape(ml_pred_arr, sample[:,1:,...].shape)
     err_sample = mse(ml_pred_arr, sample[:,1:,...])
 
-    # fig = plt.figure()
-    # ax = fig.add_subplot(2,1,1)
-    # plt.plot(jnp.linspace(0,2,setup.nx),jnp.concatenate(sample[0,0],axis=None),'-o',linewidth=2,markevery=0.2,label='Truth, t=0')
-    # plt.plot(jnp.linspace(0,2,setup.nx),jnp.concatenate(sample[0,int(setup.nt/4)],axis=None),'--o',linewidth=2,markevery=(0.4,0.2),label=f'Truth, t={setup.nt*setup.dt/4}')
-    # plt.plot(jnp.linspace(0,2,setup.nx),jnp.concatenate(sample[0,int(setup.nt*2/4)],axis=None),'--o',linewidth=2,markevery=(0.8,0.2),label=f'Truth, t={setup.nt*setup.dt*2/4}')
-    # plt.plot(jnp.linspace(0,2,setup.nx),jnp.concatenate(sample[0,int(setup.nt*3/4)],axis=None),'--o',linewidth=2,markevery=(0.12,0.2),label=f'Truth, t={setup.nt*setup.dt*3/4}')
-    # plt.plot(jnp.linspace(0,2,setup.nx),jnp.concatenate(sample[0,-1],axis=None),'--o',linewidth=2,markevery=(0.16,0.2),label='Truth, t=2.0')
-    # ax.legend()
-    
-    # ax = fig.add_subplot(2,1,2)
-    # plt.plot(jnp.linspace(0,2,setup.nx),jnp.concatenate(sample[0,0],axis=None),'-o',linewidth=2,markevery=0.2,label='Truth, t=0')
-    # plt.plot(jnp.linspace(0,2,setup.nx),jnp.concatenate(ml_pred_arr[0,int(setup.nt/4)-1],axis=None),'--s',linewidth=2,markevery=(0.4,0.2),label=f'ML, t={setup.nt*setup.dt/4}')
-    # plt.plot(jnp.linspace(0,2,setup.nx),jnp.concatenate(ml_pred_arr[0,int(setup.nt*2/4)-1],axis=None),'--s',linewidth=2,markevery=(0.8,0.2),label=f'ML, t={setup.nt*setup.dt*2/4}')
-    # plt.plot(jnp.linspace(0,2,setup.nx),jnp.concatenate(ml_pred_arr[0,int(setup.nt*3/4)-1],axis=None),'--s',linewidth=2,markevery=(0.12,0.2),label=f'ML, t={setup.nt*setup.dt*3/4}')
-    # plt.plot(jnp.linspace(0,2,setup.nx),jnp.concatenate(ml_pred_arr[0,-1],axis=None),'--s',linewidth=2,markevery=(0.16,0.2),label='ML, t=2.0')
-    # ax.legend()
-    # plt.show()
-    # fig.savefig(os.path.join('figs',f'predicitons.png'))
-
-    # fig = plt.figure()
-    # ax = fig.add_subplot(1,2,1)
-    # plt.imshow(params['linear']['w'].primal)
-    # ax.set_title('Input->Hidden Weights')
-    # plt.colorbar()
-
-    # ax = fig.add_subplot(1,2,2)
-    # plt.imshow(params['linear_1']['w'].primal)
-    # ax.set_title('Hidden->Output Weights')
-    # plt.colorbar()
-    # plt.show()
-    # fig.savefig(os.path.join('figs',f'weights.png'))
-
-
     return err_sample
-
-    # clean
-    os.system('rm -rf {}/*'.format(test_path))
-
-    return err_sample if not jnp.isnan(err_sample) and not jnp.isinf(err_sample) else jnp.array(sys.float_info.max)
 
 # @jit
 def evaluate(params: hk.Params, data: jnp.ndarray) -> float:
