@@ -387,10 +387,13 @@ def update(params: hk.Params, opt_state: optax.OptState, data: jnp.ndarray) -> T
                 for wb in grad_sample[layer].keys():
                     grad_sample[layer][wb] = jnp.nan_to_num(grad_sample[layer][wb])
             loss_batch, grad_batch = cumulate(loss_batch, loss_sample, grad_batch, grad_sample, setup.batch_size)
-
+        # Small Batch
+        updates, opt_state = jit(optimizer.update)(grad_batch, opt_state)
+        params = jit(optax.apply_updates)(params, updates)
         loss, grads = cumulate(loss, loss_batch, grads, grad_batch, setup.num_batches)
-    updates, opt_state = jit(optimizer.update)(grads, opt_state)
-    params = jit(optax.apply_updates)(params, updates)
+    # Large Batch
+    # updates, opt_state = jit(optimizer.update)(grads, opt_state)
+    # params = jit(optax.apply_updates)(params, updates)
 
     return params, opt_state, loss
 
