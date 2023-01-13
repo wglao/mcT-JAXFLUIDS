@@ -480,12 +480,15 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
 
         
         dat.data.check_sims()
+        wandb_err_data = [[t, err] for t, err in zip(jnp.linspace(setup.dt,setup.t_max,setup.nt),err_hist)]
+        err_hist_table = wandb.Table(data=wandb_err_data,columns=['Time','MSE'])
+        err_hist_plot = wandb.plot.line(err_hist_table,x='Time',y='MSE',title='Error Over Time')
         wandb.log({
             "Train loss": float(state.loss),
             "Test Error": float(test_err),
             'Test Min': float(min_err),
             'Epoch' : float(epoch),
-            "Error History": jax.device_get(err_hist)})
+            "Error History": err_hist_plot})
         
     return best_state, state
 
