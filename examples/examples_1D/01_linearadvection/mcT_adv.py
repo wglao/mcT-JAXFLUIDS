@@ -411,7 +411,6 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
     epoch_min = -1
     best_state = state
     for epoch in range(setup.num_epochs):
-        # os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "default"
         # reset each epoch
         state = TrainingState(state.params,state.opt_state,0)
         dat.data.check_sims()
@@ -468,8 +467,7 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
         
         dat.data.check_sims()
         wandb.log({"Train loss": float(state.loss), "Test Error": float(test_err), 'TEST MIN': float(min_err), 'Epoch' : float(epoch)})
-        # os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-
+        
     return best_state, state
 
 def run_simulation(case_dict,num_dict,params=None,net=None):
