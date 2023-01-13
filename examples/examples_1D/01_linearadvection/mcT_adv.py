@@ -295,6 +295,39 @@ def _evaluate_sample(params: hk.Params, sample: jnp.ndarray, sim: dat.Sim) -> jn
     # ml loss
     err_sample = mse(ml_pred_arr, sample[:,1:,...])
 
+    # fig = plt.figure()
+    # ax = fig.add_subplot(2,1,1)
+    # plt.plot(jnp.linspace(0,2,setup.nx),jnp.concatenate(sample[0,0],axis=None),'-o',linewidth=2,markevery=0.2,label='Truth, t=0')
+    # plt.plot(jnp.linspace(0,2,setup.nx),jnp.concatenate(sample[0,int(setup.nt/4)],axis=None),'--o',linewidth=2,markevery=(0.4,0.2),label=f'Truth, t={setup.nt*setup.dt/4}')
+    # plt.plot(jnp.linspace(0,2,setup.nx),jnp.concatenate(sample[0,int(setup.nt*2/4)],axis=None),'--o',linewidth=2,markevery=(0.8,0.2),label=f'Truth, t={setup.nt*setup.dt*2/4}')
+    # plt.plot(jnp.linspace(0,2,setup.nx),jnp.concatenate(sample[0,int(setup.nt*3/4)],axis=None),'--o',linewidth=2,markevery=(0.12,0.2),label=f'Truth, t={setup.nt*setup.dt*3/4}')
+    # plt.plot(jnp.linspace(0,2,setup.nx),jnp.concatenate(sample[0,-1],axis=None),'--o',linewidth=2,markevery=(0.16,0.2),label='Truth, t=2.0')
+    # ax.legend()
+    
+    # ax = fig.add_subplot(2,1,2)
+    # plt.plot(jnp.linspace(0,2,setup.nx),jnp.concatenate(sample[0,0],axis=None),'-o',linewidth=2,markevery=0.2,label='Truth, t=0')
+    # plt.plot(jnp.linspace(0,2,setup.nx),jnp.concatenate(ml_pred_arr[0,int(setup.nt/4)-1],axis=None),'--s',linewidth=2,markevery=(0.4,0.2),label=f'ML, t={setup.nt*setup.dt/4}')
+    # plt.plot(jnp.linspace(0,2,setup.nx),jnp.concatenate(ml_pred_arr[0,int(setup.nt*2/4)-1],axis=None),'--s',linewidth=2,markevery=(0.8,0.2),label=f'ML, t={setup.nt*setup.dt*2/4}')
+    # plt.plot(jnp.linspace(0,2,setup.nx),jnp.concatenate(ml_pred_arr[0,int(setup.nt*3/4)-1],axis=None),'--s',linewidth=2,markevery=(0.12,0.2),label=f'ML, t={setup.nt*setup.dt*3/4}')
+    # plt.plot(jnp.linspace(0,2,setup.nx),jnp.concatenate(ml_pred_arr[0,-1],axis=None),'--s',linewidth=2,markevery=(0.16,0.2),label='ML, t=2.0')
+    # ax.legend()
+    # plt.show()
+    # fig.savefig(os.path.join('figs',f'predicitons.png'))
+
+    # fig = plt.figure()
+    # ax = fig.add_subplot(1,2,1)
+    # plt.imshow(params['linear']['w'].primal)
+    # ax.set_title('Input->Hidden Weights')
+    # plt.colorbar()
+
+    # ax = fig.add_subplot(1,2,2)
+    # plt.imshow(params['linear_1']['w'].primal)
+    # ax.set_title('Hidden->Output Weights')
+    # plt.colorbar()
+    # plt.show()
+    # fig.savefig(os.path.join('figs',f'weights.png'))
+
+
     return err_sample
 
     # clean
@@ -375,6 +408,7 @@ def update(params: hk.Params, opt_state: optax.OptState, data: jnp.ndarray) -> T
     """
     # loop through data to lower memory cost
     loss = 0
+    grads = {}
     sims = [dat.data.next_sim() for _ in range(setup.num_train)]
     for ii in range(setup.num_batches):
         batch = lax.dynamic_slice_in_dim(data,ii*setup.batch_size,setup.batch_size)
@@ -389,11 +423,11 @@ def update(params: hk.Params, opt_state: optax.OptState, data: jnp.ndarray) -> T
             for layer in grad_sample.keys():
                 for wb in grad_sample[layer].keys():
                     grad_sample[layer][wb] = jnp.nan_to_num(grad_sample[layer][wb])
-            loss_batch, grad_batch = cumulate(loss_batch, loss_sample, grad_batch, grad_sample, data.shape[0])
+            loss_batch, grad_batch = cumulate(loss_batch, loss_sample, grad_batch, grad_sample, setup.batch_size)
 
-        updates, opt_state = jit(optimizer.update)(grad_batch, opt_state)
-        params = jit(optax.apply_updates)(params, updates)
-        loss, _ = cumulate(loss, loss_batch, {}, {}, setup.num_batches)
+        loss, grads = cumulate(loss, loss_batch, grads, grad_batch, setup.num_batches)
+    updates, opt_state = jit(optimizer.update)(grads, opt_state)
+    params = jit(optax.apply_updates)(params, updates)
 
     return params, opt_state, loss
 
@@ -602,7 +636,7 @@ if __name__ == "__main__":
 
     # data input will be (primes_L, primes_R, cons_L, cons_R) -> ([5,(nx+1),ny,nz], [5,(nx+1),ny,nz], [5,(nx+1),ny,nz], [5,(nx+1),ny,nz])
     cons_init = jnp.zeros((5,setup.nx+1,1,1))
-    initial_params = net.init(jrand.PRNGKey(1), cons_init)
+    initial_params = net.init(jrand.PRNGKey(10), cons_init)
     del cons_init
     if os.path.exists(os.path.join(param_path,'warm.pkl')) and setup.load_warm:
         warm_params = load_params(param_path,'warm.pkl')    
