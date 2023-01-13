@@ -481,8 +481,8 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
 
         
         dat.data.check_sims()
-        # wandb_err_data = [[t, err] for t, err in zip(jnp.linspace(setup.dt,setup.t_max,setup.nt),err_hist)]
-        # err_hist_table = wandb.Table(data=wandb_err_data,columns=['Time','MSE'])
+        wandb_err_data = [[t, err] for t, err in zip(jnp.linspace(setup.dt,setup.t_max,setup.nt),err_hist)]
+        err_hist_table = wandb.Table(data=wandb_err_data,columns=['Time','MSE'])
         err_hist_list.append(err_hist)
         err_hist_plot = wandb.plot.line_series(jnp.linspace(setup.dt,setup.t_max,setup.nt),err_hist_list,[f"epoch {i}" for i in range(epoch)],xname="Time after t0")
         wandb.log({
@@ -490,6 +490,7 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
             "Test Error": float(test_err),
             'Test Min': float(min_err),
             'Epoch' : float(epoch),
+            "Error History Table": err_hist_table,
             "Error History": err_hist_plot})
         
     return best_state, state
