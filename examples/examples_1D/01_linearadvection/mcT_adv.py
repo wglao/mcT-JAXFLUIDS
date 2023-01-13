@@ -424,6 +424,7 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
     min_err = sys.float_info.max
     epoch_min = -1
     best_state = state
+    err_hist_list = []
     for epoch in range(setup.num_epochs):
         # reset each epoch
         state = TrainingState(state.params,state.opt_state,0)
@@ -480,9 +481,10 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
 
         
         dat.data.check_sims()
-        wandb_err_data = [[t, err] for t, err in zip(jnp.linspace(setup.dt,setup.t_max,setup.nt),err_hist)]
-        err_hist_table = wandb.Table(data=wandb_err_data,columns=['Time','MSE'])
-        err_hist_plot = wandb.plot.line(err_hist_table,x='Time',y='MSE',title='Error Over Time')
+        # wandb_err_data = [[t, err] for t, err in zip(jnp.linspace(setup.dt,setup.t_max,setup.nt),err_hist)]
+        # err_hist_table = wandb.Table(data=wandb_err_data,columns=['Time','MSE'])
+        err_hist_list.append(err_hist)
+        err_hist_plot = wandb.plot.line_series(jnp.linspace(setup.dt,setup.t_max,setup.nt),err_hist_list,[f"epoch {i}" for i in range(epoch)],xname="Time after t0")
         wandb.log({
             "Train loss": float(state.loss),
             "Test Error": float(test_err),
@@ -621,13 +623,22 @@ if __name__ == "__main__":
     cons_init = jnp.zeros((5,setup.nx+1,1,1))
     initial_params = net.init(jrand.PRNGKey(10), cons_init)
     del cons_init
-    if os.path.exists(os.path.join(param_path,'warm.pkl')) and setup.load_warm:
-        warm_params = load_params(param_path,'warm.pkl')    
-        if compare_params(warm_params,initial_params):
-            print("\n"+"-"*5+"Using Warm-Start Params"+"-"*5+"\n")
-            initial_params = warm_params
-        else:
-            os.system('rm {}'.format(os.path.join(param_path,'warm.pkl')))
+    if setup.load_warm:
+        # loads warm params, always uses last.pkl over warm.pkl if available and toggled on
+        if setup.load_last and os.path.exists(os.path.join(param_path,'last.pkl')):
+            warm_params = load_params(param_path,'last.pkl')    
+            if compare_params(warm_params,initial_params):
+                print("\n"+"-"*5+"Using Warm-Start Params"+"-"*5+"\n")
+                initial_params = warm_params
+            else:
+                os.system('rm {}'.format(os.path.join(param_path,'warm.pkl')))
+        elif os.path.exists(os.path.join(param_path,'warm.pkl')):
+            warm_params = load_params(param_path,'warm.pkl')    
+            if compare_params(warm_params,initial_params):
+                print("\n"+"-"*5+"Using Warm-Start Params"+"-"*5+"\n")
+                initial_params = warm_params
+            else:
+                os.system('rm {}'.format(os.path.join(param_path,'warm.pkl')))
         del warm_params
 
     initial_opt_state = optimizer.init(initial_params)
