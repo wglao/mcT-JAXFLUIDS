@@ -31,6 +31,7 @@ noise_flag = True
 
 # use warm params
 load_warm = False
+load_last = False
 
 vis_flag = False
 
@@ -61,7 +62,7 @@ ns = 5
 nr = 1
 
 num_epochs = int(200)
-learning_rate = 1e-8
+learning_rate = 1e-5
 batch_size = 2
 layers = 1
 
