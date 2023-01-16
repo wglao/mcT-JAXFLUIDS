@@ -12,6 +12,8 @@ import jax.numpy as jnp
 from jax import jit
 from jax.config import config
 
+import mcTangent as mct
+
 """debugging and config"""
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
@@ -169,17 +171,18 @@ def mse(pred: jnp.ndarray, true: Optional[jnp.ndarray] = None) -> float:
     return _mse(pred - true)
 
 # dense network, layer count variable not yet implemented
-def mcT_fn(u_i: jnp.ndarray) -> jnp.ndarray:
-    """Dense network with 1 layer of ReLU units"""
-    mcT = hk.Sequential([
-        hk.Linear(nx + 1), jax.nn.relu,
-        # hk.Linear(32), jax.nn.relu,  # try second layer
-        hk.Linear(nx + 1)
-    ])
-    tangent_i = mcT(jnp.ravel(u_i))
-    return tangent_i
+# def mcT_fn(u_i: jnp.ndarray) -> jnp.ndarray:
+#     """Dense network with 1 layer of ReLU units"""
+#     mcT = hk.Sequential([
+#         hk.Linear(nx + 1), jax.nn.relu,
+#         # hk.Linear(32), jax.nn.relu,  # try second layer
+#         hk.Linear(nx + 1)
+#     ])
+#     tangent_i = mcT(jnp.ravel(u_i))
+#     return tangent_i
+# net = hk.without_apply_rng(hk.transform(mcT_fn))
 
-net = hk.without_apply_rng(hk.transform(mcT_fn))
+net = hk.without_apply_rng(mct.nn.create('dense',1,nx+1,'relu',nx+1))
 optimizer = optax.adam(learning_rate)
 
 def save_params(params: hk.Params, path: str, filename: Optional[str] = None) -> None:

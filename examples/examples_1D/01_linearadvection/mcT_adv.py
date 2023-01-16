@@ -434,7 +434,7 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
     epoch_min = -1
     best_state = state
     err_hist_list = []
-    err_hist_df = pd.DataFrame(data = {'TIme': jnp.linspace(setup.dt,setup.t_max,setup.nt)})
+    err_hist_df = pd.DataFrame(data = {'Time': jnp.linspace(setup.dt,setup.t_max,setup.nt)})
     for epoch in range(setup.num_epochs):
         # reset each epoch
         state = TrainingState(state.params,state.opt_state,0)

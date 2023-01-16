@@ -19,7 +19,7 @@ warnings.simplefilter('default', UserWarning)
 mcTangent NN generator
 """
 
-def mcT_net(architecture: str = "DENSE", *a, **k):
+def create(architecture: str = "DENSE", *a, **k):
     """
     Returns an mcTangent module based upon the input net architecture
     """
@@ -39,7 +39,7 @@ class mcT_net_dense(hk.Module):
     Creates a dense linear mcTangent NN with the specified number of layers
     """
     def __init__(self, num_layers: int = 1, layer_sizes: Union[int,Iterable[int]] = 1, activations: Optional[Union[str,Iterable[str]]] = 'RELU',
-                    in_shape: Union[int,Iterable[int]] = 1, out_shape: Union[int,Iterable[int]] = 1, name: Optional[str] = None):
+                    out_shape: Union[int,Iterable[int]] = 1, name: Optional[str] = None):
         super().__init__(name=name)
 
         self.num_layers = num_layers
@@ -56,15 +56,15 @@ class mcT_net_dense(hk.Module):
         return self.f(input)
 
     def _create_net(self):
-        sequence = []
+        sequence = [hk.Flatten()]
         for size, activation in zip(self.layer_sizes, self.activations):
             sequence += [hk.Linear(size), activation]
         sequence.append(hk.Linear(self.output_size))
         net = hk.Sequential(sequence)
 
         def f(x):
-            out = net(jnp.ravel(x))
-            return jnp.reshape(out, self.out_shape)
+            out = net(x)
+            return jnp.reshape(out, (x.shape[0],*self.out_shape))
         
         self.f = f
 
@@ -184,7 +184,7 @@ DICT_ACTIVATIONS = {
 
 if __name__ == "__main__":
     # dense architecture: dense, layers, width, activations, in, out
-    net = mcT_net("dense",1,100,'relu',10,10)
+    net = create("dense",1,100,'relu',10,10)
     print(net)
     testx = jnp.linspace(0,1,10)
     params = net.init(jrand.PRNGKey(1), testx)
@@ -192,5 +192,5 @@ if __name__ == "__main__":
     print(net.apply(params, None, testx))
     print("\n-----Dense Pass-----\n")
 
-    net = mcT_net('not implemented')
+    net = create('not implemented')
     print(net)
