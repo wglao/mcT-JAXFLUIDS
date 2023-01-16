@@ -30,7 +30,7 @@ mc_flag = True
 noise_flag = True
 
 # use warm params
-load_warm = False
+load_warm = True
 load_last = False
 
 small_batch = True

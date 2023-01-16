@@ -12,51 +12,61 @@ import json
 import pickle
 import haiku as hk
 import optax
-from jaxfluids import InputReader, Initializer, SimulationManager
-from jaxfluids.post_process import load_data
 import matplotlib.pyplot as plt
 
+warnings.simplefilter('default', UserWarning)
 """
 mcTangent NN generator
 """
 
-def mcT_net(architecture: str = "LINEAR", *a, **k):
+def mcT_net(architecture: str = "DENSE", *a, **k):
     """
     Returns an mcTangent module based upon the input net architecture
     """
-    return DICT_ARCHITECTURES[architecture](a, k)
+    if architecture.upper() not in DICT_ARCHITECTURES.keys():
+        warnings.warn(message = f"\nInvalid architecture type {architecture.upper()} requested. Choose from:\n{[key for key in DICT_ARCHITECTURES.keys()]}.\nReturning default dense net",
+                        category=UserWarning)
+        return DICT_ARCHITECTURES["DENSE"]()
+    else:
+        try:
+            return DICT_ARCHITECTURES[architecture.upper()](*a, **k)
+        except:
+            warnings.warn("\nInvalid architecture arguments given, returning default network of specified type")
+            return DICT_ARCHITECTURES[architecture.upper()]()
 
-class mcT_net_linear(hk.Module):
+class mcT_net_dense(hk.Module):
     """
     Creates a dense linear mcTangent NN with the specified number of layers
     """
-    def __init__(self, num_layers: int = 1, layer_sizes: Union[int,Iterable[int]] = 1, output_shape: Union[int,Iterable[int]] = 1, name: Optional[str] = None):
+    def __init__(self, num_layers: int = 1, layer_sizes: Union[int,Iterable[int]] = 1, activations: Optional[Union[str,Iterable[str]]] = 'RELU',
+                    in_shape: Union[int,Iterable[int]] = 1, out_shape: Union[int,Iterable[int]] = 1, name: Optional[str] = None):
         super().__init__(name=name)
 
         self.num_layers = num_layers
         self.layer_sizes = [layer_sizes]*num_layers if type(layer_sizes) == int else layer_sizes
+        self.activations = [DICT_ACTIVATIONS[activations.upper()]]*num_layers if type(activations) == str else [DICT_ACTIVATIONS[fn.upper()] for fn in activations]
         assert self.num_layers == len(self.layer_sizes)
+        assert self.num_layers == len(self.activations)
 
-        self.output_size = output_shape if type (output_shape) == int else jnp.prod(output_shape)
-        self.output_shape = (output_shape,) if type (output_shape) == int else output_shape
-
-        self.f = self._create_net()
+        self.output_size = out_shape if type(out_shape) == int else jnp.prod(out_shape)
+        self.out_shape = (out_shape,) if type(out_shape) == int else out_shape
+        self._create_net()
     
-    def __call__(self, inputs, *a, **k):
-        return self.f(inputs, *a, **k)
+    def __call__(self, input):
+        return self.f(input)
 
-    def _create_net(self) -> callable:
-        sequence = [hk.Flatten()]
-        for layer, size in range(self.num_layers), self.layer_sizes:
-            sequence += [hk.Linear(size), jax.nn.relu]
+    def _create_net(self):
+        sequence = []
+        for size, activation in zip(self.layer_sizes, self.activations):
+            sequence += [hk.Linear(size), activation]
         sequence.append(hk.Linear(self.output_size))
         net = hk.Sequential(sequence)
 
         def f(x):
-            out = net(x)
-            return jnp.reshape(out, self.output_shape)
+            out = net(jnp.ravel(x))
+            return jnp.reshape(out, self.out_shape)
         
-        return f
+        self.f = f
 
 # TODO: CNN
 # class mcT_net_cnn(hk.Module):
@@ -162,6 +172,25 @@ def load_params(path):
 
 
 DICT_ARCHITECTURES = {
-    "LINEAR" : mcT_net_linear,
-    # "CONVOLUTIONAL" : mcT_net_cnn,
+    "DENSE" : lambda *args: hk.transform(lambda x: mcT_net_dense(*args)(x))
+    # "CONVOLUTIONAL" : lambda *args: hk.transform(lambda x: mcT_net_cnn(*args)(x)),
 }
+
+DICT_ACTIVATIONS = {
+    "RELU" : jax.nn.relu,
+    "TANH" : jax.nn.hard_tanh,
+    "ELU" : jax.nn.elu
+}
+
+if __name__ == "__main__":
+    # dense architecture: dense, layers, width, activations, in, out
+    net = mcT_net("dense",1,100,'relu',10,10)
+    print(net)
+    testx = jnp.linspace(0,1,10)
+    params = net.init(jrand.PRNGKey(1), testx)
+    print(testx)
+    print(net.apply(params, None, testx))
+    print("\n-----Dense Pass-----\n")
+
+    net = mcT_net('not implemented')
+    print(net)
