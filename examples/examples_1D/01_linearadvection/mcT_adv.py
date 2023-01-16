@@ -1,5 +1,6 @@
 from typing import Tuple, NamedTuple, Optional, Iterable, Union
 import time, os, wandb, sys
+import pandas as pd
 import shutil
 import functools
 from functools import partial
@@ -433,7 +434,7 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
     epoch_min = -1
     best_state = state
     err_hist_list = []
-    err_hist_table = wandb.Table(data=jnp.linspace(setup.dt,setup.t_max,setup.nt),columns='Time')
+    err_hist_df = pd.DataFrame(data = {'TIme': jnp.linspace(setup.dt,setup.t_max,setup.nt)})
     for epoch in range(setup.num_epochs):
         # reset each epoch
         state = TrainingState(state.params,state.opt_state,0)
@@ -490,7 +491,8 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
 
         
         dat.data.check_sims()
-        err_hist_table.add_column(f"MSE{epoch}",err_hist)
+        err_hist_df[f"MSE{epoch}"] =  err_hist
+        err_hist_table = wandb.Table(data=err_hist_df)
         wandb.log({
             "Train loss": float(state.loss),
             "Test Error": float(test_err),
