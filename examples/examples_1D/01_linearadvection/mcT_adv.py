@@ -642,6 +642,7 @@ if __name__ == "__main__":
                 initial_params = warm_params
             else:
                 os.system('rm {}'.format(os.path.join(param_path,'last.pkl')))
+            del warm_params
         elif os.path.exists(os.path.join(param_path,'warm.pkl')):
             warm_params = load_params(param_path,'warm.pkl')    
             if compare_params(warm_params,initial_params):
@@ -649,7 +650,7 @@ if __name__ == "__main__":
                 initial_params = warm_params
             else:
                 os.system('rm {}'.format(os.path.join(param_path,'warm.pkl')))
-        del warm_params
+            del warm_params
 
     initial_opt_state = [optimizer.init(initial_params[i]) for i in range(5)]
 
