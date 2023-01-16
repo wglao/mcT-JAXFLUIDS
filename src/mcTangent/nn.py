@@ -39,7 +39,7 @@ class mcT_net_dense(hk.Module):
     Creates a dense linear mcTangent NN with the specified number of layers
     """
     def __init__(self, num_layers: int = 1, layer_sizes: Union[int,Iterable[int]] = 1, activations: Optional[Union[str,Iterable[str]]] = 'RELU',
-                    out_shape: Union[int,Iterable[int]] = 1, name: Optional[str] = None):
+                    out_size: Union[int,Iterable[int]] = 1, name: Optional[str] = None):
         super().__init__(name=name)
 
         self.num_layers = num_layers
@@ -48,23 +48,22 @@ class mcT_net_dense(hk.Module):
         assert self.num_layers == len(self.layer_sizes)
         assert self.num_layers == len(self.activations)
 
-        self.output_size = out_shape if type(out_shape) == int else jnp.prod(out_shape)
-        self.out_shape = (out_shape,) if type(out_shape) == int else out_shape
+        self.out_size = out_size if type(out_size) == int else jnp.prod(out_size)
         self._create_net()
     
     def __call__(self, input):
         return self.f(input)
 
     def _create_net(self):
-        sequence = [hk.Flatten()]
+        sequence = []
         for size, activation in zip(self.layer_sizes, self.activations):
             sequence += [hk.Linear(size), activation]
-        sequence.append(hk.Linear(self.output_size))
+        sequence.append(hk.Linear(self.out_size))
         net = hk.Sequential(sequence)
 
         def f(x):
-            out = net(x)
-            return jnp.reshape(out, (x.shape[0],*self.out_shape))
+            out = net(jnp.ravel(x))
+            return jnp.reshape(out, (x.shape))
         
         self.f = f
 

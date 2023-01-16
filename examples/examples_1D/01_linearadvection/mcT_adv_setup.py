@@ -259,8 +259,8 @@ if __name__ == "__main__":
     def warm_loss(params,cons_L,cons_R,truth):
         net_tangent = jnp.zeros_like(cons_L)
         for i in range(5):
-            net_L = jax.jit(net.apply)(params[i],cons_L[:,i])
-            net_R = jax.jit(net.apply)(params[i],cons_R[:,i])
+            net_L = jax.jit(jax.vmap(net.apply, in_axes=(None,0)))(params[i],cons_L[:,i])
+            net_R = jax.jit(jax.vmap(net.apply, in_axes=(None,0)))(params[i],cons_R[:,i])
             tangent_i = jnp.reshape(0.5*(net_L+net_R), net_tangent[:,i,...].shape)
             net_tangent = net_tangent.at[:,i,...].set(tangent_i)
         loss = mse(net_tangent/dx,truth)
