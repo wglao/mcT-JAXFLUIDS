@@ -169,16 +169,15 @@ def mse(pred: jnp.ndarray, true: Optional[jnp.ndarray] = None) -> float:
     return _mse(pred - true)
 
 # dense network, layer count variable not yet implemented
-def mcT_fn(cons: jnp.ndarray) -> jnp.ndarray:
+def mcT_fn(u_i: jnp.ndarray) -> jnp.ndarray:
     """Dense network with 1 layer of ReLU units"""
     mcT = hk.Sequential([
-        hk.Flatten(),
         hk.Linear(nx + 1), jax.nn.relu,
         # hk.Linear(32), jax.nn.relu,  # try second layer
         hk.Linear(nx + 1)
     ])
-    tangent = mcT(cons)
-    return tangent
+    tangent_i = mcT(jnp.ravel(u_i))
+    return tangent_i
 
 net = hk.without_apply_rng(hk.transform(mcT_fn))
 optimizer = optax.adam(learning_rate)
@@ -207,23 +206,24 @@ def compare_params(params: hk.Params, shapes: Union[Iterable[Iterable[int]],hk.P
     Returns True if the params dict has all correct shapes
 
     ----- inputs -----\n
-    :param params: network params to be checked
+    :param params: list of network params to be checked
     :param shapes: baseline list of shapes or another parameter dict to compare to
 
     ----- returns -----\n
     :return match: True if shapes are correct
     """
-    for ii, layer in enumerate(params):
-        for jj, wb in enumerate(params[layer]):
-            if jnp.isnan(params[layer][wb]).any():
-                return False
-            if type(shapes) == list:
-                if params[layer][wb].shape != shapes[2*ii+jj]:
+    for ii in range(len(params)):
+        for jj, layer in enumerate(params[ii]):
+            for kk, wb in enumerate(params[ii][layer]):
+                if jnp.isnan(params[ii][layer][wb]).any():
                     return False
-            else:
-                for i,j in zip(params[layer][wb].shape,shapes[layer][wb].shape):
-                    if i != j:
+                if type(shapes) == list:
+                    if params[ii][layer][wb].shape != shapes[2*jj+kk]:
                         return False
+                else:
+                    for a,b in zip(params[ii][layer][wb].shape,shapes[ii][layer][wb].shape):
+                        if a != b:
+                            return False
     return True
 
 if __name__ == "__main__":
@@ -254,10 +254,13 @@ if __name__ == "__main__":
     print('\n'+'-'*5+'Warm Start'+'-'*5+'\n')
     
     def warm_loss(params,cons_L,cons_R,truth):
-        cons_in = 0.5*(cons_L+cons_R)
-        net_out = jnp.array(jax.vmap(net.apply, in_axes=(None,0))(params,cons_in))
-        net_fluxes = jnp.reshape(net_out/dx,cons_in.shape)
-        loss = mse(net_fluxes,truth)
+        net_tangent = jnp.zeros_like(cons_L)
+        for i in range(5):
+            net_L = jax.jit(net.apply)(params[i],cons_L[:,i])
+            net_R = jax.jit(net.apply)(params[i],cons_R[:,i])
+            tangent_i = jnp.reshape(0.5*(net_L+net_R), net_tangent[:,i,...].shape)
+            net_tangent = net_tangent.at[:,i,...].set(tangent_i)
+        loss = mse(net_tangent/dx,truth)
         return loss
 
     def warm_load(sim: dat.Sim, sim_manager: SimulationManager, epoch: int):
@@ -280,10 +283,11 @@ if __name__ == "__main__":
 
     def warm_start(epochs):
         # init net params
-        cons_init = jnp.zeros((5,nx+1,1,1))
-        params = net.init(jrand.PRNGKey(epochs), cons_init)
-        opt_state = optimizer.init(params)
-        del cons_init
+        u_init = jnp.zeros((1,nx+1,ny,nz))
+        params = net.init(jrand.PRNGKey(epochs), u_init)
+        opt_state = [optimizer.init(params) for _ in range(5)]
+        params = [params for _ in range(5)]
+        del u_init
 
         min_err = sys.float_info.max
         epoch_min = -1
@@ -300,7 +304,6 @@ if __name__ == "__main__":
             numerical['conservatives']['time_integration']['fixed_timestep'] = dt
 
             input_reader = InputReader(case_dict,numerical)
-            initializer = Initializer(input_reader)
             sim_manager = SimulationManager(input_reader)
 
             # load data
@@ -313,12 +316,11 @@ if __name__ == "__main__":
             warm_true = jax.vmap(model.solve_riemann_problem_xi, in_axes=(0,0,0,0,None))
             truth_array = jnp.array(warm_true(primes_L,primes_R,cons_L,cons_R,0))
             loss, grads = jax.value_and_grad(jit(warm_loss),argnums=(0))(params,cons_L,cons_R,truth_array)
-            updates, opt_state = jit(optimizer.update)(grads, opt_state)
-            params = jit(optax.apply_updates)(params, updates)
+            for i in range(5):
+                updates_i, opt_state[i] = jit(optimizer.update)(grads[i], opt_state[i])
+                params[i] = jit(optax.apply_updates)(params[i], updates_i)
             
             # test
-            if dat.data.size() == 0:
-                dat.data.check_sims()
             sim = dat.data.next_sim()
             primes_L,primes_R,cons_L,cons_R = warm_load(sim,sim_manager,epoch)
             test_truth = warm_true(primes_L,primes_R,cons_L,cons_R,0)

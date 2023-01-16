@@ -49,8 +49,8 @@ param_path = setup.proj("network/parameters")
 
 # %% create mcTangent network and training functions
 class TrainingState(NamedTuple):
-    params: hk.Params
-    opt_state: optax.OptState
+    params: Iterable[hk.Params]
+    opt_state: Iterable[optax.OptState]
     loss: float
 
 from mcT_adv_setup import save_params, load_params, compare_params, mse, net, optimizer
@@ -356,18 +356,21 @@ def evaluate(params: hk.Params, data: jnp.ndarray) -> float:
 #     return params_new, opt_state_new, loss
 
 @jit
-def cumulate(loss: float, loss_new: float, grads: dict, grads_new: dict, batch_size: int):
+def cumulate(loss: float, loss_new: float, grads: Iterable[dict], grads_new: Iterable[dict], batch_size: int):
     loss += loss_new/batch_size
-    for layer in grads_new:
-        if layer not in grads.keys():
-            grads[layer] = {}
-        for wb in grads_new[layer]:
-            if wb not in grads[layer].keys():
-                grads[layer][wb] = jnp.zeros_like(grads_new[layer][wb])
-            grads[layer][wb] += grads_new[layer][wb]/batch_size
+    for ii in range(len(grads_new)):
+        if ii > len(grads)-1:
+            grads.append({})
+        for layer in grads_new[ii]:
+            if layer not in grads[ii].keys():
+                grads[ii][layer] = {}
+            for wb in grads_new[ii][layer]:
+                if wb not in grads[ii][layer].keys():
+                    grads[ii][layer][wb] = jnp.zeros_like(grads_new[ii][layer][wb])
+                grads[ii][layer][wb] += grads_new[ii][layer][wb]/batch_size
     return loss, grads
 
-def update(params: hk.Params, opt_state: optax.OptState, data: jnp.ndarray) -> Tuple:
+def update(params: Iterable[hk.Params], opt_state: Iterable[optax.OptState], data: jnp.ndarray) -> Tuple:
     """
     Evaluates network loss and gradients
     Applies optimizer updates and returns the new parameters, state, and loss
@@ -382,31 +385,34 @@ def update(params: hk.Params, opt_state: optax.OptState, data: jnp.ndarray) -> T
     """
     # loop through data to lower memory cost
     loss = 0
-    grads = {}
+    grads = [{}]
     sims = [dat.data.next_sim() for _ in range(setup.num_train)]
     for ii in range(setup.num_batches):
         batch = lax.dynamic_slice_in_dim(data,ii*setup.batch_size,setup.batch_size)
         batch = jnp.swapaxes(batch,1,2)
         loss_batch = 0
-        grad_batch = {}
+        grad_batch = [{}]*5
         sim_batch_index = lax.dynamic_slice_in_dim(jnp.arange(setup.num_train),ii*setup.batch_size,setup.batch_size)
         sims_batch = sims[sim_batch_index[0]:sim_batch_index[-1]+1]
 
         for jj, (sample, sim) in enumerate(zip(batch, sims_batch)):
             loss_sample, grad_sample = value_and_grad(get_loss_sample, argnums=0)(params, sample, sim, 1+jj+ii*setup.batch_size)
-            for layer in grad_sample.keys():
-                for wb in grad_sample[layer].keys():
-                    grad_sample[layer][wb] = jnp.nan_to_num(grad_sample[layer][wb])
+            for ii in range(len(grad_sample)):
+                for layer in grad_sample[ii].keys():
+                    for wb in grad_sample[ii][layer].keys():
+                        grad_sample[ii][layer][wb] = jnp.nan_to_num(grad_sample[ii][layer][wb])
             loss_batch, grad_batch = cumulate(loss_batch, loss_sample, grad_batch, grad_sample, setup.batch_size)
         # Small Batch
         if setup.small_batch:
-            updates, opt_state = jit(optimizer.update)(grad_batch, opt_state)
-            params = jit(optax.apply_updates)(params, updates)
+            for i in range(5):
+                updates, opt_state[i] = jit(optimizer.update)(grad_batch[i], opt_state[i])
+                params[i] = jit(optax.apply_updates)(params[i], updates)
         loss, grads = cumulate(loss, loss_batch, grads, grad_batch, setup.num_batches)
     # Large Batch
     if not setup.small_batch:
-        updates, opt_state = jit(optimizer.update)(grads, opt_state)
-        params = jit(optax.apply_updates)(params, updates)
+        for i in range(5):
+            updates, opt_state[i] = jit(optimizer.update)(grads[i], opt_state[i])
+            params[i] = jit(optax.apply_updates)(params[i], updates)
 
     return params, opt_state, loss
 
@@ -427,6 +433,7 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
     epoch_min = -1
     best_state = state
     err_hist_list = []
+    err_hist_table = wandb.Table(data=jnp.linspace(setup.dt,setup.t_max,setup.nt),columns='Time')
     for epoch in range(setup.num_epochs):
         # reset each epoch
         state = TrainingState(state.params,state.opt_state,0)
@@ -483,17 +490,14 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
 
         
         dat.data.check_sims()
-        wandb_err_data = [[t, err] for t, err in zip(jnp.linspace(setup.dt,setup.t_max,setup.nt),err_hist)]
-        err_hist_table = wandb.Table(data=wandb_err_data,columns=['Time','MSE'])
-        err_hist_list.append(err_hist)
-        err_hist_plot = wandb.plot.line_series(jnp.linspace(setup.dt,setup.t_max,setup.nt),err_hist_list,[f"epoch {i}" for i in range(epoch)],xname="Time after t0")
+        err_hist_table.add_column(f"MSE{epoch}",err_hist)
         wandb.log({
             "Train loss": float(state.loss),
             "Test Error": float(test_err),
             'Test Min': float(min_err),
             'Epoch' : float(epoch),
-            "Error History Table": err_hist_table,
-            "Error History": err_hist_plot})
+            "Error History Table": err_hist_table
+            })
         
     return best_state, state
 
@@ -622,10 +626,11 @@ def visualize():
 if __name__ == "__main__":
     # os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
-    # data input will be (primes_L, primes_R, cons_L, cons_R) -> ([5,(nx+1),ny,nz], [5,(nx+1),ny,nz], [5,(nx+1),ny,nz], [5,(nx+1),ny,nz])
-    cons_init = jnp.zeros((5,setup.nx+1,1,1))
-    initial_params = net.init(jrand.PRNGKey(10), cons_init)
-    del cons_init
+    # data input will be each variable separately
+    u_init = jnp.zeros((1,setup.nx+1,setup.ny,setup.nz))
+    initial_params = net.init(jrand.PRNGKey(setup.num_epochs), u_init)
+    initial_params = [initial_params for _ in range(5)]
+    del u_init
     if setup.load_warm:
         # loads warm params, always uses last.pkl over warm.pkl if available and toggled on
         if setup.load_last and os.path.exists(os.path.join(param_path,'last.pkl')):
@@ -634,7 +639,7 @@ if __name__ == "__main__":
                 print("\n"+"-"*5+"Using Warm-Start Params"+"-"*5+"\n")
                 initial_params = warm_params
             else:
-                os.system('rm {}'.format(os.path.join(param_path,'warm.pkl')))
+                os.system('rm {}'.format(os.path.join(param_path,'last.pkl')))
         elif os.path.exists(os.path.join(param_path,'warm.pkl')):
             warm_params = load_params(param_path,'warm.pkl')    
             if compare_params(warm_params,initial_params):
@@ -644,7 +649,7 @@ if __name__ == "__main__":
                 os.system('rm {}'.format(os.path.join(param_path,'warm.pkl')))
         del warm_params
 
-    initial_opt_state = optimizer.init(initial_params)
+    initial_opt_state = [optimizer.init(initial_params[i]) for i in range(5)]
 
     state = TrainingState(initial_params, initial_opt_state, 0)
 

@@ -60,9 +60,11 @@ class mcTangentNN(RiemannSolver):
         assert type(net) == hk.Transformed, "Network architecture must be constructed using the Haiku Transform"
 
         # EVALUATE NEURAL NETWORK FOR TANGENT MANIFOLD
-        cons_in = 0.5 * (cons_L + cons_R)
-        net_out = jit(net.apply)(params, cons_in)
-
-        tangent = jnp.reshape(net_out,cons_in.shape)
+        tangent = jnp.zeros_like(cons_L)
+        for i in range(5):
+            tangent_Li = jit(net.apply)(params[i],cons_L[i])
+            tangent_Ri = jit(net.apply)(params[i],cons_R[i])
+            tangent_i = jnp.reshape(0.5*(tangent_Li+tangent_Ri), tangent[i].shape)
+            tangent = tangent.at[i].set(tangent_i)
         
         return tangent
