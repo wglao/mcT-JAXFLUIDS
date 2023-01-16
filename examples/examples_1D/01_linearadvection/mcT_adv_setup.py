@@ -33,6 +33,8 @@ noise_flag = True
 load_warm = False
 load_last = False
 
+small_batch = True
+
 vis_flag = False
 
 case_name = 'mcT_adv'
@@ -44,7 +46,7 @@ nt = 200
 dt = t_max/nt
 
 x_max = 2.0
-nx = 180
+nx = 100
 dx = x_max/float(nx)
 
 ny = 1
@@ -54,7 +56,7 @@ ny_fine = ny
 nz_fine = nz
 cfl = u*dt/dx
 
-assert cfl <= 1, "Bad CFL Condition for Implicit Solvers"
+assert cfl <= 1, "Bad CFL Condition for Explicit Solvers"
 
 mc_alpha = 1e5 if mc_flag else 0
 noise_level = 0.02 if noise_flag else 0
@@ -67,8 +69,8 @@ batch_size = 2
 layers = 1
 
 # sample set size
-num_train = 10
-num_test = 10
+num_train = 20
+num_test = 20
 test_ratio = 1
 
 # define batch by number of sequences trained on, instead of samples
