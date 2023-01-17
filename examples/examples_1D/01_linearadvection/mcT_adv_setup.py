@@ -69,6 +69,7 @@ num_epochs = int(200)
 learning_rate = 1e-4
 batch_size = 2
 layers = 1
+hidden_size = 5000
 
 # sample set size
 num_train = 20
@@ -182,7 +183,7 @@ def mse(pred: jnp.ndarray, true: Optional[jnp.ndarray] = None) -> float:
 #     return tangent_i
 # net = hk.without_apply_rng(hk.transform(mcT_fn))
 
-net = hk.without_apply_rng(mct.nn.create('dense',layers,5000,'relu',nx+1))
+net = hk.without_apply_rng(mct.nn.create('dense',layers,hidden_size,'relu',nx+1))
 optimizer = optax.adam(learning_rate)
 
 def save_params(params: hk.Params, path: str, filename: Optional[str] = None) -> None:
