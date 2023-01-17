@@ -32,7 +32,7 @@ mc_flag = True
 noise_flag = True
 
 # use warm params
-load_warm = True
+load_warm = False
 load_last = False
 
 small_batch = True
@@ -62,11 +62,11 @@ assert cfl <= 1, "Bad CFL Condition for Explicit Solvers"
 
 mc_alpha = 1e5 if mc_flag else 0
 noise_level = 0.02 if noise_flag else 0
-ns = 5
+ns = 1
 nr = 1
 
 num_epochs = int(200)
-learning_rate = 1e-5
+learning_rate = 1e-4
 batch_size = 2
 layers = 1
 
@@ -182,7 +182,7 @@ def mse(pred: jnp.ndarray, true: Optional[jnp.ndarray] = None) -> float:
 #     return tangent_i
 # net = hk.without_apply_rng(hk.transform(mcT_fn))
 
-net = hk.without_apply_rng(mct.nn.create('dense',1,nx+1,'relu',nx+1))
+net = hk.without_apply_rng(mct.nn.create('dense',layers,5000,'relu',nx+1))
 optimizer = optax.adam(learning_rate)
 
 def save_params(params: hk.Params, path: str, filename: Optional[str] = None) -> None:
