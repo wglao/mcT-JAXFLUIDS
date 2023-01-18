@@ -260,6 +260,8 @@ def _evaluate_sample(params: hk.Params, sample: jnp.ndarray, sim: dat.Sim) -> jn
     ----- returns -----\n
     :return err_sample: mean squared error for the sample
     :return err_hist_sample: mean squared error for every timestep
+    :return merr_sample: mean squared error of governing model over the entire sample
+    :return merr_hist_sample: mean squared error of governing model for every timestep
     """
     # feed forward with mcTangent ns+1 steps
     coarse_case = sim.case
@@ -293,13 +295,33 @@ def _evaluate_sample(params: hk.Params, sample: jnp.ndarray, sim: dat.Sim) -> jn
     ml_pred_arr = jnp.array(ml_pred_arr[1:])
     ml_pred_arr = jnp.nan_to_num(ml_pred_arr)
     ml_pred_arr = jnp.moveaxis(ml_pred_arr,0,2)
-
-    # ml loss
     ml_pred_arr = jnp.reshape(ml_pred_arr, sample[:,1:,...].shape)
+
     # err_sample = mse(ml_pred_arr, sample[:,1:,...])
     err_hist_sample = jnp.array(vmap(mse, in_axes=(1,1))(ml_pred_arr, sample[:,1:,...]))
 
-    return jnp.mean(err_hist_sample), err_hist_sample
+    coarse_num['conservatives']['convective_fluxes']['riemann_solver'] = "HLLC"
+
+    input_reader = InputReader(coarse_case,coarse_num)
+    sim_manager = SimulationManager(input_reader)
+
+    mc_pred_arr, _ = sim_manager.feed_forward(
+        ml_primes_init,
+        None, # not needed for single-phase, but is a required arg for feed_forward
+        int(float(coarse_case['general']['end_time']) / coarse_case['general']['save_dt']),
+        coarse_case['general']['save_dt'],
+        0.0, 1,
+        None,
+        None
+    )
+    mc_pred_arr = jnp.array(mc_pred_arr[1:])
+    mc_pred_arr = jnp.nan_to_num(mc_pred_arr)
+    mc_pred_arr = jnp.moveaxis(mc_pred_arr,0,2)
+    mc_pred_arr = jnp.reshape(mc_pred_arr, sample[:,1:,...].shape)
+
+    merr_hist_sample = jnp.array(vmap(mse, in_axes=(1,1))(mc_pred_arr, sample[:,1:,...]))
+
+    return jnp.mean(err_hist_sample), err_hist_sample, jnp.mean(merr_hist_sample), merr_hist_sample
 
 # @jit
 def evaluate(params: hk.Params, data: jnp.ndarray) -> float:
@@ -314,21 +336,28 @@ def evaluate(params: hk.Params, data: jnp.ndarray) -> float:
     ----- returns -----\n
     :return err_epoch: mean squared error for the epoch
     :return err_hist: mean squared error for every time step of the predicted trajectories
+    :return merr_epoch: mean squared error between model trajectory and truth
+    :return merr_hist: mean squared error of governing model for every time step
     """
     err_epoch = 0
+    merr_epoch = 0
     err_hist = jnp.zeros(data.shape[2]-1)
+    merr_hist = jnp.zeros(data.shape[2]-1)
     sims = [dat.data.next_sim() for _ in range(setup.num_test)]
     for sample, sim in zip(data, sims):
-        err_sample, err_hist_sample = _evaluate_sample(params,sample,sim)
+        err_sample, err_hist_sample, merr_sample, merr_hist_sample = _evaluate_sample(params,sample,sim)
         err_epoch += err_sample/setup.num_test
         err_hist += err_hist_sample/setup.num_test
+        merr_epoch += merr_sample/setup.num_test
+        merr_hist += merr_hist_sample/setup.num_test
 
     # err_epoch = vmap(_evaluate_sample, in_axes=(None,0))(params, data)
     if not jnp.isnan(err_epoch) and not jnp.isinf(err_epoch):
         pass
     else:
         err_epoch = jnp.array(sys.float_info.max)
-    return err_epoch, err_hist 
+    
+    return err_epoch, err_hist, merr_epoch, merr_hist 
 
 # @partial(pmap, axis_name='data', in_axes=(0,0,0))
 # def update_par(params: hk.Params, opt_state: optax.OptState, data: jnp.ndarray) -> Tuple:
@@ -467,7 +496,7 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
         state = TrainingState(params_new,opt_state_new,loss_new)
 
         # call test function
-        test_err, err_hist = evaluate(state.params, test_coarse)
+        test_err, err_hist, merr, merr_hist = evaluate(state.params, test_coarse)
 
         t2 = time.time()
 
@@ -491,13 +520,15 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
 
         
         dat.data.check_sims()
-        err_hist_df[f"MSE{epoch}"] =  err_hist
+        err_hist_df[f"MCT_err{epoch}"] =  err_hist
+        err_hist_df[f"HLLC_err{epoch}"] =  merr_hist
         err_hist_table = wandb.Table(data=err_hist_df)
         wandb.log({
             "Train loss": float(state.loss),
             "Test Error": float(test_err),
-            'Test Min': float(min_err),
-            'Epoch' : float(epoch),
+            "Test Min": float(min_err),
+            "Model Error": float(merr),
+            "Epoch": float(epoch),
             "Error History Table": err_hist_table
             })
         

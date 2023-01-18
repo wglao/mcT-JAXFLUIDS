@@ -67,13 +67,13 @@ nr = 1
 
 num_epochs = int(200)
 learning_rate = 1e-4
-batch_size = 2
+batch_size = 10
 layers = 1
 hidden_size = 5000
 
 # sample set size
-num_train = 20
-num_test = 20
+num_train = 40
+num_test = 40
 test_ratio = 1
 
 # define batch by number of sequences trained on, instead of samples
