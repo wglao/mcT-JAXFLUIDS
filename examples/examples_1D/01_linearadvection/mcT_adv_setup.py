@@ -35,7 +35,7 @@ noise_flag = True
 load_warm = False
 load_last = True
 # keep track of epochs if interrupted
-last_epoch = 51 if load_last else 0
+last_epoch = 52 if load_last else 0
 
 small_batch = True
 
@@ -266,7 +266,7 @@ if __name__ == "__main__":
             net_R = jax.jit(jax.vmap(net.apply, in_axes=(None,0)))(params[i],cons_R[:,i])
             tangent_i = jnp.reshape(0.5*(net_L+net_R), net_tangent[:,i,...].shape)
             net_tangent = net_tangent.at[:,i,...].set(tangent_i)
-        loss = mse(net_tangent/dx,truth)
+        loss = mse(net_tangent*dx,truth)
         return loss
 
     def warm_load(sim: dat.Sim, sim_manager: SimulationManager, epoch: int):
