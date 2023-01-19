@@ -1,3 +1,7 @@
 19 1 2022:
 
-implement continue from last run
+rewrite sim manager to use mcTangent in a unique way during time_integration
+    if riemann_solver is MCTANGENT
+    calculate tangent manifold using MCT net and params
+    integrate using tangent as "RHS"
+    else proceed as normal (for testing mc loss)

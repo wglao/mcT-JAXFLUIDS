@@ -145,10 +145,11 @@ def get_loss_sample(params: hk.Params, sample:jnp.ndarray, sim: dat.Sim, seed: i
     coarse_num = sim.numerical
     coarse_case['domain']['x']['cells'] = setup.nx
     coarse_num['conservatives']['time_integration']['fixed_timestep'] = setup.dt
+    coarse_num['conservatives']['time_integration']['time_integrator'] = setup.integrator
     coarse_num['conservatives']['convective_fluxes']['riemann_solver'] = "MCTANGENT"
 
-    ml_parameters_dict = {"riemann_solver":params}
-    ml_networks_dict = hk.data_structures.to_immutable_dict({"riemann_solver": net})
+    ml_parameters_dict = {"MCTANGENT":params}
+    ml_networks_dict = hk.data_structures.to_immutable_dict({"MCTANGENT": net})
 
     input_reader = InputReader(coarse_case,coarse_num)
     sim_manager = SimulationManager(input_reader)
@@ -212,12 +213,12 @@ def get_loss_sample(params: hk.Params, sample:jnp.ndarray, sim: dat.Sim, seed: i
     # enforce realistic bounds
     # jax.config.update("jax_disable_jit", True)
 
-    mc_primes_init = mc_primes_init.at[:,0,...].set(jnp.where(mc_primes_init[:,0,...]<min_rho,
-                                                    jnp.full_like(mc_primes_init[:,0,...],min_rho),
-                                                    mc_primes_init[:,0,...]))
-    mc_primes_init = mc_primes_init.at[:,1,...].set(jnp.ones_like(mc_primes_init[:,1,...]))
-    mc_primes_init = mc_primes_init.at[:,2:3,...].set(jnp.zeros_like(mc_primes_init[:,2:3,...]))
-    mc_primes_init = mc_primes_init.at[:,4,...].set(jnp.ones_like(mc_primes_init[:,4,...]))
+    # mc_primes_init = mc_primes_init.at[:,0,...].set(jnp.where(mc_primes_init[:,0,...]<min_rho,
+    #                                                 jnp.full_like(mc_primes_init[:,0,...],min_rho),
+    #                                                 mc_primes_init[:,0,...]))
+    # mc_primes_init = mc_primes_init.at[:,1,...].set(jnp.ones_like(mc_primes_init[:,1,...]))
+    # mc_primes_init = mc_primes_init.at[:,2:3,...].set(jnp.zeros_like(mc_primes_init[:,2:3,...]))
+    # mc_primes_init = mc_primes_init.at[:,4,...].set(jnp.ones_like(mc_primes_init[:,4,...]))
     # for ii, primes in enumerate(mc_primes_init):
     #     plt.plot(jnp.linspace(*coarse_case['domain']['x']['range'],num=coarse_case['domain']['x']['cells']),jax.device_get(jnp.concatenate(primes[0],axis=None)).primal)
     #     plt.title(f"{ii+1} / {mc_primes_init.shape[0]}")
@@ -270,10 +271,11 @@ def _evaluate_sample(params: hk.Params, sample: jnp.ndarray, sim: dat.Sim) -> jn
     coarse_case['general']['save_path'] = test_path
     coarse_case['domain']['x']['cells'] = setup.nx
     coarse_num['conservatives']['time_integration']['fixed_timestep'] = setup.dt
+    coarse_num['conservatives']['time_integration']['time_integrator'] = setup.integrator
     coarse_num['conservatives']['convective_fluxes']['riemann_solver'] = "MCTANGENT"
 
-    ml_parameters_dict = {"riemann_solver": params}
-    ml_networks_dict = hk.data_structures.to_immutable_dict({"riemann_solver": net})
+    ml_parameters_dict = {"MCTANGENT": params}
+    ml_networks_dict = hk.data_structures.to_immutable_dict({"MCTANGENT": net})
 
     input_reader = InputReader(coarse_case,coarse_num)
     sim_manager = SimulationManager(input_reader)
@@ -463,7 +465,7 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
     epoch_min = -1
     best_state = state
     err_hist_list = []
-    err_hist_df = pd.DataFrame(data = {'Time': jnp.linspace(setup.dt,setup.t_max,setup.nt)})
+    err_hist_df = pd.DataFrame(data = {'Time': jnp.linspace(setup.dt,int(setup.t_max*setup.test_ratio),int(setup.nt*setup.test_ratio))})
     for epoch in range(setup.last_epoch,setup.num_epochs):
         # reset each epoch
         state = TrainingState(state.params,state.opt_state,0)
@@ -591,15 +593,15 @@ def visualize():
     params_best = load_params(os.path.join(param_path,"best.pkl"))
     params_end = load_params(os.path.join(param_path,"end.pkl"))
 
-    ml_parameters_dict = {"riemann_solver":params_best}
-    ml_networks_dict = hk.data_structures.to_immutable_dict({"riemann_solver": net})
+    ml_parameters_dict = {"MCTANGENT":params_best}
+    ml_networks_dict = hk.data_structures.to_immutable_dict({"MCTANGENT": net})
 
     sim_manager = run_simulation(coarse_case,coarse_num,ml_parameters_dict,ml_networks_dict)
 
     path = sim_manager.output_writer.save_path_domain
     _, _, _, data_dict_best = load_data(path, quantities)
 
-    ml_parameters_dict = {"riemann_solver":params_end}
+    ml_parameters_dict = {"MCTANGENT":params_end}
     sim_manager = run_simulation(coarse_case,coarse_num,ml_parameters_dict,ml_networks_dict)
 
     path = sim_manager.output_writer.save_path_domain
@@ -661,7 +663,7 @@ if __name__ == "__main__":
     # os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
     # data input will be each variable separately
-    u_init = jnp.zeros((1,setup.nx+1,setup.ny,setup.nz))
+    u_init = jnp.zeros((1,setup.nx,setup.ny,setup.nz))
     initial_params = net.init(jrand.PRNGKey(setup.num_epochs), u_init)
     initial_params = [initial_params for _ in range(5)]
     del u_init

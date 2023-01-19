@@ -395,41 +395,53 @@ class SimulationManager:
 
         # LOOP STAGES
         for stage in range( self.time_integrator.no_stages ):
+            if self.input_reader.numerical_setup['conservatives']['convective_fluxes']['riemann_solver'] == "MCTANGENT":
+                # NN FORWARD PASS
+                params = ml_parameters_dict['MCTANGENT']
+                net = ml_networks_dict['MCTANGENT']
+                cons_real = cons[:,4:104]
+                tangent = jnp.zeros_like(cons_real)
+                for i, var in enumerate(cons_real):
+                    tangent = tangent.at[i].set(jnp.reshape(net.apply(params[i],var),tangent[i].shape))
+                if stage > 0:
+                    cons = self.time_integrator.prepare_buffer_for_integration(cons, init_cons, stage)
+                cons = self.time_integrator.integrate(cons,tangent,timestep_size,stage)
+                residual_interface = None
+            else:
+                # RIGHT HAND SIDE
+                rhs_cons, rhs_levelset, residual_interface = self.space_solver.compute_rhs(
+                    cons, primes, current_time_stage, 
+                    levelset, volume_fraction, apertures, 
+                    forcings_dictionary, 
+                    ml_parameters_dict, ml_networks_dict)
 
-            # RIGHT HAND SIDE
-            rhs_cons, rhs_levelset, residual_interface = self.space_solver.compute_rhs(
-                cons, primes, current_time_stage, 
-                levelset, volume_fraction, apertures, 
-                forcings_dictionary, 
-                ml_parameters_dict, ml_networks_dict)
+                # TRANSFORM TO CONSERVATIVES
+                if self.input_reader.levelset_type != None:
+                    cons = self.levelset_handler.transform_to_conservatives(cons, volume_fraction)
 
-            # TRANSFORM TO CONSERVATIVES
-            if self.input_reader.levelset_type != None:
-                cons = self.levelset_handler.transform_to_conservatives(cons, volume_fraction)
+                # PREPARE BUFFER FOR RUNGE KUTTA INTEGRATION
+                if stage > 0:
+                    cons = self.time_integrator.prepare_buffer_for_integration(cons, init_cons, stage)
+                    if self.input_reader.levelset_type in ["FLUID-FLUID", "FLUID-SOLID-DYNAMIC"]:
+                        levelset = self.time_integrator.prepare_buffer_for_integration(levelset, init_levelset, stage)
 
-            # PREPARE BUFFER FOR RUNGE KUTTA INTEGRATION
-            if stage > 0:
-                cons = self.time_integrator.prepare_buffer_for_integration(cons, init_cons, stage)
+                # INTEGRATE
+                cons = self.time_integrator.integrate(cons, rhs_cons, timestep_size, stage)
                 if self.input_reader.levelset_type in ["FLUID-FLUID", "FLUID-SOLID-DYNAMIC"]:
-                    levelset = self.time_integrator.prepare_buffer_for_integration(levelset, init_levelset, stage)
+                    levelset_new = self.time_integrator.integrate(levelset, rhs_levelset, timestep_size, stage)
+                    
+                    # REINITIALIZE
+                    if self.input_reader.levelset_type == "FLUID-FLUID" and stage == self.time_integrator.no_stages - 1 and reinitialize:
+                        levelset_new, residual_reinit   = self.levelset_handler.reinitialize(levelset_new, False)
+                    else:
+                        residual_reinit = 0.0
 
-            # INTEGRATE
-            cons = self.time_integrator.integrate(cons, rhs_cons, timestep_size, stage)
-            if self.input_reader.levelset_type in ["FLUID-FLUID", "FLUID-SOLID-DYNAMIC"]:
-                levelset_new = self.time_integrator.integrate(levelset, rhs_levelset, timestep_size, stage)
+                    # LEVELSET BOUNDARIES AND INTERFACE RECONSTRUCTION
+                    levelset_new                        = self.boundary_condition.fill_boundary_levelset(levelset_new)
+                    volume_fraction_new, apertures_new  = self.levelset_handler.compute_volume_fraction_and_apertures(levelset_new)
                 
-                # REINITIALIZE
-                if self.input_reader.levelset_type == "FLUID-FLUID" and stage == self.time_integrator.no_stages - 1 and reinitialize:
-                    levelset_new, residual_reinit   = self.levelset_handler.reinitialize(levelset_new, False)
-                else:
-                    residual_reinit = 0.0
-
-                # LEVELSET BOUNDARIES AND INTERFACE RECONSTRUCTION
-                levelset_new                        = self.boundary_condition.fill_boundary_levelset(levelset_new)
-                volume_fraction_new, apertures_new  = self.levelset_handler.compute_volume_fraction_and_apertures(levelset_new)
-            
-            elif self.input_reader.levelset_type == "FLUID-SOLID-STATIC":
-                levelset_new, volume_fraction_new, apertures_new = levelset, volume_fraction, apertures
+                elif self.input_reader.levelset_type == "FLUID-SOLID-STATIC":
+                    levelset_new, volume_fraction_new, apertures_new = levelset, volume_fraction, apertures
 
             current_time_stage = current_time + timestep_size*self.time_integrator.timestep_increment_factor[stage]
 

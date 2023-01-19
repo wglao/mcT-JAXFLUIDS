@@ -11,6 +11,7 @@ import jax.random as jrand
 import jax.numpy as jnp
 from jax import jit
 from jax.config import config
+from jaxfluids.time_integration import DICT_TIME_INTEGRATION
 
 import mcTangent as mct
 
@@ -33,7 +34,7 @@ noise_flag = True
 
 # use warm params
 load_warm = False
-load_last = True
+load_last = False
 # keep track of epochs if interrupted
 last_epoch = 52 if load_last else 0
 
@@ -59,6 +60,7 @@ nx_fine = 4*nx
 ny_fine = ny
 nz_fine = nz
 cfl = u*dt/dx
+integrator = "RK3"
 
 assert cfl <= 1, "Bad CFL Condition for Explicit Solvers"
 
@@ -74,9 +76,9 @@ layers = 1
 hidden_size = 5000
 
 # sample set size
-num_train = 30
-num_test = 30
-test_ratio = 1
+num_train = 40
+num_test = 10
+test_ratio = 1.5
 
 # define batch by number of sequences trained on, instead of samples
 num_batches = int(np.ceil(num_train/batch_size))
@@ -185,7 +187,7 @@ def mse(pred: jnp.ndarray, true: Optional[jnp.ndarray] = None) -> float:
 #     return tangent_i
 # net = hk.without_apply_rng(hk.transform(mcT_fn))
 
-net = hk.without_apply_rng(mct.nn.create('dense',layers,hidden_size,'relu',nx+1))
+net = hk.without_apply_rng(mct.nn.create('dense',layers,hidden_size,'relu',nx))
 optimizer = optax.adam(learning_rate)
 
 def save_params(params: hk.Params, path: str, filename: Optional[str] = None) -> None:
