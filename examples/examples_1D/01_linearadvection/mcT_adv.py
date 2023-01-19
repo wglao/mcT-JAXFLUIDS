@@ -464,7 +464,7 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
     best_state = state
     err_hist_list = []
     err_hist_df = pd.DataFrame(data = {'Time': jnp.linspace(setup.dt,setup.t_max,setup.nt)})
-    for epoch in range(setup.num_epochs):
+    for epoch in range(setup.last_epoch,setup.num_epochs):
         # reset each epoch
         state = TrainingState(state.params,state.opt_state,0)
         dat.data.check_sims()
@@ -522,6 +522,7 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
         dat.data.check_sims()
         err_hist_df[f"MCT_err{epoch}"] =  err_hist
         err_hist_df[f"HLLC_err{epoch}"] =  merr_hist
+        # pd.concat(axis=1)
         err_hist_table = wandb.Table(data=err_hist_df)
         wandb.log({
             "Train loss": float(state.loss),
@@ -664,7 +665,7 @@ if __name__ == "__main__":
     initial_params = net.init(jrand.PRNGKey(setup.num_epochs), u_init)
     initial_params = [initial_params for _ in range(5)]
     del u_init
-    if setup.load_warm:
+    if setup.load_warm or setup.load_last:
         # loads warm params, always uses last.pkl over warm.pkl if available and toggled on
         if setup.load_last and os.path.exists(os.path.join(param_path,'last.pkl')):
             warm_params = load_params(param_path,'last.pkl')    
@@ -674,7 +675,7 @@ if __name__ == "__main__":
             else:
                 os.system('rm {}'.format(os.path.join(param_path,'last.pkl')))
             del warm_params
-        elif os.path.exists(os.path.join(param_path,'warm.pkl')):
+        elif setup.load_warm and os.path.exists(os.path.join(param_path,'warm.pkl')):
             warm_params = load_params(param_path,'warm.pkl')    
             if compare_params(warm_params,initial_params):
                 print("\n"+"-"*5+"Using Warm-Start Params"+"-"*5+"\n")

@@ -33,7 +33,9 @@ noise_flag = True
 
 # use warm params
 load_warm = False
-load_last = False
+load_last = True
+# keep track of epochs if interrupted
+last_epoch = 51 if load_last else 0
 
 small_batch = True
 
@@ -72,8 +74,8 @@ layers = 1
 hidden_size = 5000
 
 # sample set size
-num_train = 40
-num_test = 40
+num_train = 30
+num_test = 30
 test_ratio = 1
 
 # define batch by number of sequences trained on, instead of samples
@@ -214,7 +216,7 @@ def compare_params(params: hk.Params, shapes: Union[Iterable[Iterable[int]],hk.P
     :param shapes: baseline list of shapes or another parameter dict to compare to
 
     ----- returns -----\n
-    :return match: True if shapes are correct
+    :return match: True if shapes match
     """
     for ii in range(len(params)):
         for jj, layer in enumerate(params[ii]):
