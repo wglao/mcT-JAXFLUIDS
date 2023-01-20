@@ -4,6 +4,7 @@ import shutil, functools, warnings
 import numpy as np
 import re
 import jax
+import jax.tree_util as jtr
 import jax.numpy as jnp
 import jax.random as jrand
 import jax.image as jim
@@ -185,6 +186,52 @@ DICT_ACTIVATIONS = {
     "NONE": None
 }
 
+class eve():
+    """Eve Optimizer with Optax-like API"""
+
+    class eve_state(NamedTuple):
+        m: dict
+        v: dict
+        d: float
+
+    @jit
+    def __init__(self, lr_init: float = 1e-3, min_global: float = 0):
+        self.a1 = lr_init
+        self.b = [0.9,0.999,0.999]
+        self.c = 10
+        self.eps = 1e-8
+        self.t = 0
+        self.f = 1
+        self.f_star = min_global
+
+    @jit
+    def init(self, params: hk.Params) -> eve_state:
+        d = 1
+        m = jtr.tree_map(lambda p: jnp.zeros_like(p), params)
+        v = jtr.tree_map(lambda p: jnp.zeros_like(p), params)
+        
+        return self.eve_state(m,v,d)
+    
+    @jit
+    def update(self, grads: dict[dict[jnp.ndarray]], loss: float, eve_state: eve_state) -> tuple(dict[dict[jnp.ndarray]], eve_state):
+        self.t += 1
+
+        if self.t > 1:
+            d_new = (jnp.abs(loss - self.f)) / (jnp.min(jnp.array([loss,self.f])) - self.f_star)
+            d_tilde = jnp.clip(d_new,d_new/self.c,d_new*self.c)
+            eve_state.d = self.b[2]*eve_state.d + (1-self.b[2])*d_tilde
+        self.f = loss
+
+        eve_state.m = jtr.tree_map(lambda m, g: jnp.asarray(self.b[0]*m + (1-self.b[0])*g), (eve_state.m, grads))
+        m_hat = jtr.tree_map(lambda m: jnp.asarray(m / (1-self.b[0])), eve_state.m)
+
+        eve_state.v = jtr.tree_map(lambda v, g: jnp.asarray(self.b[1]*v + (1-self.b[1])*g**2), (eve_state.v, grads))
+        v_hat = jtr.tree_map(lambda v: jnp.asarray(v / (1-self.b[1])), eve_state.v)
+
+        updates = jtr.tree_map(lambda mh, vh: jnp.asarray(-self.a1/eve_state.d * mh/(jnp.sqrt(vh)+self.eps)), (m_hat, v_hat))
+
+        return updates, eve_state
+
 if __name__ == "__main__":
     # dense architecture: dense, layers, width, activations, in, out
     net = create("dense",1,100,'relu',10,10)
@@ -197,3 +244,6 @@ if __name__ == "__main__":
 
     net = create('not implemented')
     print(net)
+
+    optimizer = eve()
+    print("\n-----Eve Creation Passed-----\n")
