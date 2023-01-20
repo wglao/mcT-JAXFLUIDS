@@ -70,7 +70,7 @@ ns = 1
 nr = 1
 
 num_epochs = int(300)
-learning_rate = 1e-4
+learning_rate = 1e-3
 batch_size = 10
 layers = 0
 hidden_size = 10000
@@ -189,7 +189,8 @@ def mse(pred: jnp.ndarray, true: Optional[jnp.ndarray] = None) -> float:
 # net = hk.without_apply_rng(hk.transform(mcT_fn))
 
 net = hk.without_apply_rng(mct.nn.create('dense',layers,hidden_size,activation,nx))
-optimizer = optax.adam(learning_rate)
+# optimizer = optax.adam(learning_rate)
+optimizer = mct.nn.eve()
 
 def save_params(params: hk.Params, path: str, filename: Optional[str] = None) -> None:
     # params = jax.device_get(params)
