@@ -218,7 +218,7 @@ class eve():
 
         if self.t > 1:
             d_new = (jnp.abs(loss - self.f)) / (jnp.min(jnp.array([loss,self.f])) - self.f_star)
-            d_tilde = jnp.clip(d_new,d_new/self.c,d_new*self.c)
+            d_tilde = jnp.clip(d_new,1/self.c,self.c)
             eve_state.d = self.b[2]*eve_state.d + (1-self.b[2])*d_tilde
         self.f = loss
 
