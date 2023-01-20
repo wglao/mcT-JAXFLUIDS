@@ -445,7 +445,7 @@ def update(params: Iterable[hk.Params], opt_state: Iterable[optax.OptState], dat
     if not setup.small_batch:
         for i in range(5):
             # updates, opt_state[i] = jit(optimizer.update)(grads[i], opt_state[i])
-            updates, opt_state[i] = optimizer.update(grad[i], loss, opt_state[i])
+            updates, opt_state[i] = optimizer.update(grads[i], loss, opt_state[i])
             params[i] = jit(optax.apply_updates)(params[i], updates)
 
     return params, opt_state, loss
