@@ -204,7 +204,6 @@ class eve():
         self.f = 1
         self.f_star = min_global
 
-    @jit
     def init(self, params: hk.Params) -> eve_state:
         d = 1
         m = jtr.tree_map(lambda p: jnp.zeros_like(p), params)
@@ -212,8 +211,7 @@ class eve():
         
         return self.eve_state(m,v,d)
     
-    @jit
-    def update(self, grads: dict[dict[jnp.ndarray]], loss: float, eve_state: eve_state) -> tuple(dict[dict[jnp.ndarray]], eve_state):
+    def update(self, grads: dict[dict[jnp.ndarray]], loss: float, eve_state: eve_state) -> tuple[dict[dict[jnp.ndarray]], eve_state]:
         self.t += 1
 
         if self.t > 1:
