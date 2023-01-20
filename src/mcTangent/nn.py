@@ -57,7 +57,10 @@ class mcT_net_dense(hk.Module):
     def _create_net(self):
         sequence = []
         for size, activation in zip(self.layer_sizes, self.activations):
-            sequence += [hk.Linear(size), activation]
+            if activation is not None:
+                sequence += [hk.Linear(size), activation]
+            else:
+                sequence += [hk.Linear(size)]
         sequence.append(hk.Linear(self.out_size))
         net = hk.Sequential(sequence)
 
@@ -178,7 +181,8 @@ DICT_ARCHITECTURES = {
 DICT_ACTIVATIONS = {
     "RELU" : jax.nn.relu,
     "TANH" : jax.nn.hard_tanh,
-    "ELU" : jax.nn.elu
+    "ELU" : jax.nn.elu,
+    "NONE": None
 }
 
 if __name__ == "__main__":

@@ -1,0 +1,19 @@
+Alternatives to Gaussian Noise:
+    - Untrained Network of same architecture:
+        - adds noise similar to the effects of the Network
+        - can hopefully encourage robust behavior on sequential passes
+        - need to derive mathematical justification
+    
+Non-convexity of loss function:
+    - L(x,y,theta) depends on training data (x,y)
+    - (x,y) subset of set of all possible in/out data (X,Y)
+    - what does L(X,Y,theta) look like?
+        - is it still non-convex?
+        - can you "take the limit" of L(x,y,theta) as (x,y) -> (X,Y)?
+            - maybe impossible for inf-dim model
+            - maybe possible for discrete model (model-constrained learning)
+                - compare mathematical representation of theta(x) and model(x)
+        - "bad training set" could be where ||L(x,y,theta) - L(X,Y,theta)||_theta is Large
+            - bad generalization
+        - is minima of L(X,Y,theta) also a minima in L(x,y,theta)?
+            - overfitting

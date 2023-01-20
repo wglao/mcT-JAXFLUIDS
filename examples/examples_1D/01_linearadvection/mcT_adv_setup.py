@@ -36,7 +36,7 @@ noise_flag = True
 load_warm = False
 load_last = False
 # keep track of epochs if interrupted
-last_epoch = 52 if load_last else 0
+last_epoch = 21 if load_last else 0
 
 small_batch = True
 
@@ -69,11 +69,12 @@ noise_level = 0.02 if noise_flag else 0
 ns = 1
 nr = 1
 
-num_epochs = int(200)
+num_epochs = int(300)
 learning_rate = 1e-4
 batch_size = 10
-layers = 1
-hidden_size = 5000
+layers = 0
+hidden_size = 10000
+activation = "None"
 
 # sample set size
 num_train = 40
@@ -187,7 +188,7 @@ def mse(pred: jnp.ndarray, true: Optional[jnp.ndarray] = None) -> float:
 #     return tangent_i
 # net = hk.without_apply_rng(hk.transform(mcT_fn))
 
-net = hk.without_apply_rng(mct.nn.create('dense',layers,hidden_size,'relu',nx))
+net = hk.without_apply_rng(mct.nn.create('dense',layers,hidden_size,activation,nx))
 optimizer = optax.adam(learning_rate)
 
 def save_params(params: hk.Params, path: str, filename: Optional[str] = None) -> None:

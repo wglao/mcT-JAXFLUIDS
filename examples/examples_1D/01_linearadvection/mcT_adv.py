@@ -503,7 +503,10 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
         t2 = time.time()
 
         # save in case job is canceled, can resume
-        save_params(state.params,os.path.join(param_path,'last.pkl'))
+        last_param_path = os.path.join(param_path,'last.pkl')
+        if os.path.exists(last_param_path):
+            os.remove(last_param_path)
+        save_params(state.params,last_param_path)
         
         if test_err <= min_err:
             min_err = test_err
@@ -523,7 +526,10 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
         
         dat.data.check_sims()
         err_hist_df[f"MCT_err{epoch}"] =  err_hist
-        err_hist_df[f"HLLC_err{epoch}"] =  merr_hist
+        if epoch == setup.last_epoch:
+            err_hist_df[f"HLLC_err"] =  merr_hist
+        else:
+            del merr_hist
         # pd.concat(axis=1)
         err_hist_table = wandb.Table(data=err_hist_df)
         wandb.log({
@@ -670,20 +676,20 @@ if __name__ == "__main__":
     if setup.load_warm or setup.load_last:
         # loads warm params, always uses last.pkl over warm.pkl if available and toggled on
         if setup.load_last and os.path.exists(os.path.join(param_path,'last.pkl')):
-            warm_params = load_params(param_path,'last.pkl')    
-            if compare_params(warm_params,initial_params):
-                print("\n"+"-"*5+"Using Warm-Start Params"+"-"*5+"\n")
-                initial_params = warm_params
-            else:
-                os.system('rm {}'.format(os.path.join(param_path,'last.pkl')))
-            del warm_params
+            last_params = load_params(param_path,'last.pkl')    
+            # if compare_params(last_params,initial_params):
+            print("\n"+"-"*5+"Using Last Params"+"-"*5+"\n")
+            initial_params = last_params
+            # else:
+            #     os.system('rm {}'.format(os.path.join(param_path,'last.pkl')))
+            del last_params
         elif setup.load_warm and os.path.exists(os.path.join(param_path,'warm.pkl')):
             warm_params = load_params(param_path,'warm.pkl')    
-            if compare_params(warm_params,initial_params):
-                print("\n"+"-"*5+"Using Warm-Start Params"+"-"*5+"\n")
-                initial_params = warm_params
-            else:
-                os.system('rm {}'.format(os.path.join(param_path,'warm.pkl')))
+            # if compare_params(warm_params,initial_params):
+            print("\n"+"-"*5+"Using Warm-Start Params"+"-"*5+"\n")
+            initial_params = warm_params
+            # else:
+            #     os.system('rm {}'.format(os.path.join(param_path,'warm.pkl')))
             del warm_params
 
     initial_opt_state = [optimizer.init(initial_params[i]) for i in range(5)]
