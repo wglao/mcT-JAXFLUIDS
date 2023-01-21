@@ -13,7 +13,12 @@ import json
 import pickle
 import haiku as hk
 import optax
+import optax._src.base as opbase
+import optax._src.utils as oputils
+import optax._src.combine as opcomb
+import optax._src.alias as opalias
 import matplotlib.pyplot as plt
+import chex
 
 warnings.simplefilter('default', UserWarning)
 """
@@ -186,49 +191,119 @@ DICT_ACTIVATIONS = {
     "NONE": None
 }
 
-class eve():
-    """Eve Optimizer with Optax-like API"""
+class ScaleByEveState(NamedTuple):
+    """State for the Eve algorithm."""
+    count: chex.Array  # shape=(), dtype=jnp.int32.
+    mu: opbase.Updates
+    nu: opbase.Updates
+    d: float
+    f: float
 
-    class eve_state(NamedTuple):
-        m: dict
-        v: dict
-        d: float
+# def __init__(self, lr_init: float = 1e-3, min_global: float = 0):
+#     self.a1 = lr_init
+#     self.b = [0.9,0.999,0.999]
+#     self.c = 10
+#     self.eps = 1e-8
+#     self.t = 0
+#     self.f = 1
+#     self.f_star = min_global
 
-    @jit
-    def __init__(self, lr_init: float = 1e-3, min_global: float = 0):
-        self.a1 = lr_init
-        self.b = [0.9,0.999,0.999]
-        self.c = 10
-        self.eps = 1e-8
-        self.t = 0
-        self.f = 1
-        self.f_star = min_global
+def scale_by_eve(b1: float = 0.9,
+    b2: float = 0.999,
+    b3: float = 0.999,
+    c: float = 10.,
+    eps: float = 1e-8,
+    f_star: float = 0.,
+    mu_dtype: Optional[Any] = None,
+) -> opbase.GradientTransformation:
+    """Rescale updates according to the Eve algorithm.
 
-    def init(self, params: hk.Params) -> eve_state:
-        d = 1
-        m = jtr.tree_map(lambda p: jnp.zeros_like(p), params)
-        v = jtr.tree_map(lambda p: jnp.zeros_like(p), params)
-        
-        return self.eve_state(m,v,d)
-    
-    def update(self, grads: dict[dict[jnp.ndarray]], loss: float, eve_state: eve_state) -> tuple[dict[dict[jnp.ndarray]], eve_state]:
-        self.t += 1
+    References:
+        [Hayashi et al, 2018](https://arxiv.org/abs/1611.01505)
 
-        if self.t > 1:
-            d_new = (jnp.abs(loss - self.f)) / (jnp.min(jnp.array([loss,self.f])) - self.f_star)
-            d_tilde = jnp.clip(d_new,1/self.c,self.c)
-            eve_state.d = self.b[2]*eve_state.d + (1-self.b[2])*d_tilde
-        self.f = loss
+    Args:
+        b1: the exponential decay rate to track the first moment of past gradients.
+        b2: the exponential decay rate to track the second moment of past gradients.
+        b3: the exponential decay rate to track the sub-optimality.
+        c: the clipping limit to prevent extreme global learning rate changes
+        eps: a small constant applied to denominator outside of the square root
+        (as in the Adam paper) to avoid dividing by zero when rescaling.
+        f_star: estimation of the global minimum
+        mu_dtype: optional `dtype` to be used for the first order accumulator; if
+        `None` then the `dtype` is inferred from `params` and `updates`.
 
-        eve_state.m = jtr.tree_map(lambda m, g: jnp.asarray(self.b[0]*m + (1-self.b[0])*g), (eve_state.m, grads))
-        m_hat = jtr.tree_map(lambda m: jnp.asarray(m / (1-self.b[0])), eve_state.m)
+    Returns:
+        An (init_fn, update_fn) tuple.
+    """
+    mu_dtype = oputils.canonicalize_dtype(mu_dtype)
 
-        eve_state.v = jtr.tree_map(lambda v, g: jnp.asarray(self.b[1]*v + (1-self.b[1])*g**2), (eve_state.v, grads))
-        v_hat = jtr.tree_map(lambda v: jnp.asarray(v / (1-self.b[1])), eve_state.v)
+    def init_fn(params):
+        mu = jax.tree_util.tree_map(  # First moment
+            lambda t: jnp.zeros_like(t, dtype=mu_dtype), params)
+        nu = jax.tree_util.tree_map(jnp.zeros_like, params)  # Second moment
+        d = 1.
+        f = 1.
+        return ScaleByEveState(count=jnp.zeros([], jnp.int32), mu=mu, nu=nu, d=d, f=f)
 
-        updates = jtr.tree_map(lambda mh, vh: jnp.asarray(-self.a1/eve_state.d * mh/(jnp.sqrt(vh)+self.eps)), (m_hat, v_hat))
+    def update_fn(updates: opbase.Updates, state: ScaleByEveState, f: float,  params=None):
+        del params
+        mu = jtr.tree_map(lambda m, u: jnp.asarray(b1*m + (1-b1)*u), (state.mu, updates))
+        nu = jtr.tree_map(lambda v, u: jnp.asarray(b1*v + (1-b1)*u), (state.nu, updates))
+        count_inc = oputils.numerics.safe_int32_increment(state.count)
+        mu_hat = jtr.tree_map(lambda m: jnp.asarray(m / (1-b1)), mu)
+        nu_hat = jtr.tree_map(lambda v: jnp.asarray(v / (1-b2)), nu)
+        if state.count > 1:
+            d_new = (jnp.abs(f - state.f)) / (jnp.min(jnp.array([f,state.f])) - f_star)
+            d_tilde = jnp.clip(d_new,1/c,c)
+            d = b3*state.d + (1-b3)*d_tilde
+        updates = jax.tree_util.tree_map(
+            lambda m, v: m / (jnp.sqrt(v) + eps) / d, mu_hat, nu_hat)
+        mu = oputils.cast_tree(mu, mu_dtype)
+        return updates, ScaleByEveState(count=count_inc, mu=mu, nu=nu, d=d, f=f)
 
-        return updates, eve_state
+    return opbase.GradientTransformation(init_fn, update_fn)
+
+def eve(
+    learning_rate: float = 1e-3,
+    b1: float = 0.9,
+    b2: float = 0.999,
+    b3: float = 0.999,
+    c: float = 10.,
+    eps: float = 1e-8,
+    f_star: float = 0.,
+    mu_dtype: Optional[Any] = None,
+) -> opbase.GradientTransformation:
+    """The Eve optimizer.
+
+    Eve is an SGD variant with adaptive global and local learning rates. The `learning_rate`
+    used for each weight is computed from estimates of first- and second-order
+    moments of the gradients (using suitable exponential moving averages) as in ADAM.
+    The global learning rate is scaled by some notion of sub-optimality and is increased
+    when far from optimal and is decreased when approaching optimality
+
+    References:
+        Hayashi et al, 2018: https://arXiv.org/abs/1611.01505
+
+    Args:
+        learning_rate: this is the initial global scaling factor.
+        b1: the exponential decay rate to track the first moment of past gradients.
+        b2: the exponential decay rate to track the second moment of past gradients.
+        b3: the exponential decay rate to track the sub-optimality.
+        c: the clipping limit to prevent extreme global learning rate changes
+        eps: a small constant applied to denominator outside of the square root
+        (as in the Adam paper) to avoid dividing by zero when rescaling.
+        f_star: estimation of the global minimum
+        mu_dtype: optional `dtype` to be used for the first order accumulator; if
+        `None` then the `dtype` is inferred from `params` and `updates`.
+
+    Returns:
+        the corresponding `GradientTransformation`.
+    """
+    return opcomb.chain(
+        scale_by_eve(
+            b1=b1, b2=b2, b3=b3, c=c, eps=eps, f_star=f_star, mu_dtype=mu_dtype),
+        opalias._scale_by_learning_rate(learning_rate),
+    )
 
 if __name__ == "__main__":
     # dense architecture: dense, layers, width, activations, in, out

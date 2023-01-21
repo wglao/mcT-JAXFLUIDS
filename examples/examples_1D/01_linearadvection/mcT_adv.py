@@ -676,7 +676,7 @@ if __name__ == "__main__":
     # data input will be each variable separately
     u_init = jnp.zeros((1,setup.nx,setup.ny,setup.nz))
     initial_params = net.init(jrand.PRNGKey(setup.num_epochs), u_init)
-    z_params = jtr.tree_map(jnp.asarray(lambda p: jnp.zeros_like(p), initial_params))
+    z_params = jtr.tree_map(lambda p: jnp.zeros_like(p), initial_params)
     initial_params = [initial_params] + [z_params]*4 # only density matters for linear advection, but JF uses all 5 cons
     del u_init
     if setup.load_warm or setup.load_last:

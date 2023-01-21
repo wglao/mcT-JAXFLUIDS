@@ -259,7 +259,7 @@ if __name__ == "__main__":
     from mcT_adv import get_coarse
     
     cache_path = '.test_cache'
-    optimizer = optax.adam(1e-3)
+    # optimizer = optax.adam(1e-3)
 
     print('\n'+'-'*5+'Warm Start'+'-'*5+'\n')
     
