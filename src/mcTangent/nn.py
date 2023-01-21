@@ -245,17 +245,18 @@ def scale_by_eve(b1: float = 0.9,
         f = 1.
         return ScaleByEveState(count=jnp.zeros([], jnp.int32), mu=mu, nu=nu, d=d, f=f)
 
-    def update_fn(updates: opbase.Updates, state: ScaleByEveState, f: float,  params=None):
-        del params
-        mu = jtr.tree_map(lambda m, u: jnp.asarray(b1*m + (1-b1)*u), (state.mu, updates))
-        nu = jtr.tree_map(lambda v, u: jnp.asarray(b1*v + (1-b1)*u), (state.nu, updates))
+    def update_fn(updates: opbase.Updates, state: ScaleByEveState, f: float):
+        mu = jtr.tree_map(lambda m, u: jnp.asarray(b1*m + (1-b1)*u), state.mu, updates)
+        nu = jtr.tree_map(lambda v, u: jnp.asarray(b1*v + (1-b1)*u), state.nu, updates)
         count_inc = oputils.numerics.safe_int32_increment(state.count)
         mu_hat = jtr.tree_map(lambda m: jnp.asarray(m / (1-b1)), mu)
         nu_hat = jtr.tree_map(lambda v: jnp.asarray(v / (1-b2)), nu)
-        if state.count > 1:
+        if count_inc > 1:
             d_new = (jnp.abs(f - state.f)) / (jnp.min(jnp.array([f,state.f])) - f_star)
             d_tilde = jnp.clip(d_new,1/c,c)
             d = b3*state.d + (1-b3)*d_tilde
+        else:
+            d = 1.
         updates = jax.tree_util.tree_map(
             lambda m, v: m / (jnp.sqrt(v) + eps) / d, mu_hat, nu_hat)
         mu = oputils.cast_tree(mu, mu_dtype)

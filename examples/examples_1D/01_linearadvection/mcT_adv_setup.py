@@ -190,7 +190,8 @@ def mse(pred: jnp.ndarray, true: Optional[jnp.ndarray] = None) -> float:
 
 net = hk.without_apply_rng(mct.nn.create('dense',layers,hidden_size,activation,nx))
 # optimizer = optax.adam(learning_rate)
-optimizer = mct.nn.eve()
+# optimizer = mct.nn.eve()
+optimizer = optax.eve()
 
 def save_params(params: hk.Params, path: str, filename: Optional[str] = None) -> None:
     # params = jax.device_get(params)
