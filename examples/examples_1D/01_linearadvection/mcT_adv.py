@@ -496,7 +496,7 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
 
         
         dat.data.check_sims()
-        err_hist_df[f"MCT_err{epoch}"] =  err_hist
+        err_hist_df[f"MCT_err_ep{epoch}_{setup.ns}s{setup.nr}r"] =  err_hist
         if epoch == setup.last_epoch:
             err_hist_df[f"HLLC_err"] =  merr_hist
         else:
