@@ -403,8 +403,8 @@ class SimulationManager:
                 tangent = jnp.zeros_like(primes_real)
                 for i, var in enumerate(primes_real):
                     tangent = tangent.at[i].set(jnp.reshape(net.apply(params[i],var),tangent[i].shape))
-                if stage > 0:
-                    primes = self.time_integrator.prepare_buffer_for_integration(primes, init_primes, stage)
+                # if stage > 0:
+                #     primes = self.time_integrator.prepare_buffer_for_integration(primes, init_primes, stage)
                 primes = self.time_integrator.integrate(primes,tangent,timestep_size,stage)
                 cons = get_conservatives_from_primitives(primes,self.material_manager)
                 residual_interface = None
