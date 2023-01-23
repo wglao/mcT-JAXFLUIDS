@@ -399,13 +399,14 @@ class SimulationManager:
                 # NN FORWARD PASS
                 params = ml_parameters_dict['MCTANGENT']
                 net = ml_networks_dict['MCTANGENT']
-                cons_real = cons[:,4:104]
-                tangent = jnp.zeros_like(cons_real)
-                for i, var in enumerate(cons_real):
+                primes_real = primes[:,4:104]
+                tangent = jnp.zeros_like(primes_real)
+                for i, var in enumerate(primes_real):
                     tangent = tangent.at[i].set(jnp.reshape(net.apply(params[i],var),tangent[i].shape))
                 if stage > 0:
-                    cons = self.time_integrator.prepare_buffer_for_integration(cons, init_cons, stage)
-                cons = self.time_integrator.integrate(cons,tangent,timestep_size,stage)
+                    primes = self.time_integrator.prepare_buffer_for_integration(primes, init_primes, stage)
+                primes = self.time_integrator.integrate(primes,tangent,timestep_size,stage)
+                cons = get_conservatives_from_primitives(primes,self.material_manager)
                 residual_interface = None
             else:
                 # RIGHT HAND SIDE
@@ -443,18 +444,18 @@ class SimulationManager:
                 elif self.input_reader.levelset_type == "FLUID-SOLID-STATIC":
                     levelset_new, volume_fraction_new, apertures_new = levelset, volume_fraction, apertures
 
+                # MIXING AND PRIME EXTENSION
+                if self.input_reader.levelset_type != None:
+                    cons, mask_small_cells = self.levelset_handler.mixing(cons, levelset_new, volume_fraction_new, volume_fraction)
+                    cons    = self.levelset_handler.transform_to_volume_averages(cons, volume_fraction_new)
+                    primes  = self.levelset_handler.compute_primitives_from_conservatives_in_real_fluid(cons, primes, levelset_new, volume_fraction_new, mask_small_cells)
+                    cons, primes, residual_primes           = self.levelset_handler.extend_primes(cons, primes, levelset_new, volume_fraction_new, current_time_stage, mask_small_cells)
+                    levelset, volume_fraction, apertures    = levelset_new, volume_fraction_new, apertures_new
+                else:
+                    primes = get_primitives_from_conservatives(cons, self.material_manager)
+            
             current_time_stage = current_time + timestep_size*self.time_integrator.timestep_increment_factor[stage]
 
-            # MIXING AND PRIME EXTENSION
-            if self.input_reader.levelset_type != None:
-                cons, mask_small_cells = self.levelset_handler.mixing(cons, levelset_new, volume_fraction_new, volume_fraction)
-                cons    = self.levelset_handler.transform_to_volume_averages(cons, volume_fraction_new)
-                primes  = self.levelset_handler.compute_primitives_from_conservatives_in_real_fluid(cons, primes, levelset_new, volume_fraction_new, mask_small_cells)
-                cons, primes, residual_primes           = self.levelset_handler.extend_primes(cons, primes, levelset_new, volume_fraction_new, current_time_stage, mask_small_cells)
-                levelset, volume_fraction, apertures    = levelset_new, volume_fraction_new, apertures_new
-            else:
-                primes = get_primitives_from_conservatives(cons, self.material_manager)
-            
             # FILL BOUNDARIES
             cons, primes = self.boundary_condition.fill_boundary_primes(cons, primes, current_time_stage)
 

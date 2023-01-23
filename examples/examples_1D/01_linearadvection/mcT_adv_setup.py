@@ -38,7 +38,7 @@ load_last = False
 # keep track of epochs if interrupted
 last_epoch = 21 if load_last else 0
 
-small_batch = True
+small_batch = False
 
 vis_flag = False
 
