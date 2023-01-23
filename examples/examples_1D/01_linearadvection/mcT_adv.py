@@ -388,21 +388,6 @@ def evaluate(params: hk.Params, data: jnp.ndarray) -> float:
 
 #     return params_new, opt_state_new, loss
 
-@jit
-def cumulate(loss: float, loss_new: float, grads: Iterable[dict], grads_new: Iterable[dict], batch_size: int):
-    loss += loss_new/batch_size
-    for ii in range(len(grads_new)):
-        if ii > len(grads)-1:
-            grads.append({})
-        for layer in grads_new[ii]:
-            if layer not in grads[ii].keys():
-                grads[ii][layer] = {}
-            for wb in grads_new[ii][layer]:
-                if wb not in grads[ii][layer].keys():
-                    grads[ii][layer][wb] = jnp.zeros_like(grads_new[ii][layer][wb])
-                grads[ii][layer][wb] += grads_new[ii][layer][wb]/batch_size
-    return loss, grads
-
 def update(params: Iterable[hk.Params], opt_state: Iterable[optax.OptState], data: jnp.ndarray) -> Tuple:
     """
     Evaluates network loss and gradients
@@ -418,35 +403,34 @@ def update(params: Iterable[hk.Params], opt_state: Iterable[optax.OptState], dat
     """
     # loop through data to lower memory cost
     loss = 0
-    grads = [{}]
+    grads = jax.tree_map(jnp.zeros_like, params)
     sims = [dat.data.next_sim() for _ in range(setup.num_train)]
     for ii in range(setup.num_batches):
         batch = lax.dynamic_slice_in_dim(data,ii*setup.batch_size,setup.batch_size)
         batch = jnp.swapaxes(batch,1,2)
         loss_batch = 0
-        grad_batch = [{}]*5
+        grad_batch = jax.tree_map(jnp.zeros_like, params)
         sim_batch_index = lax.dynamic_slice_in_dim(jnp.arange(setup.num_train),ii*setup.batch_size,setup.batch_size)
         sims_batch = sims[sim_batch_index[0]:sim_batch_index[-1]+1]
 
         for jj, (sample, sim) in enumerate(zip(batch, sims_batch)):
             loss_sample, grad_sample = value_and_grad(get_loss_sample, argnums=0)(params, sample, sim, 1+jj+ii*setup.batch_size)
-            for ii in range(len(grad_sample)):
-                for layer in grad_sample[ii].keys():
-                    for wb in grad_sample[ii][layer].keys():
-                        grad_sample[ii][layer][wb] = jnp.nan_to_num(grad_sample[ii][layer][wb])
-            loss_batch, grad_batch = cumulate(loss_batch, loss_sample, grad_batch, grad_sample, setup.batch_size)
+            loss_batch += loss_sample/setup.batch_size
+            grad_sample = jax.tree_map(jnp.nan_to_num, grad_sample)
+            grad_batch = jax.tree_map(lambda g1, g2: g1+g2/setup.batch_size, grad_batch, grad_sample)
         # Small Batch
         if setup.small_batch:
             for i in range(5):
-                # updates, opt_state[i] = jit(optimizer.update)(grad_batch[i], opt_state[i])
-                updates, opt_state[i] = optimizer.update(grad_batch[i], opt_state[i], loss_batch)
+                opt_state[i].hyperparams['f'] = loss_batch
+                updates, opt_state[i] = jit(optimizer.update)(grad_batch[i], opt_state[i])
                 params[i] = jit(optax.apply_updates)(params[i], updates)
-        loss, grads = cumulate(loss, loss_batch, grads, grad_batch, setup.num_batches)
+        loss += loss_batch/setup.num_batches
+        grads = jax.tree_map(lambda g1, g2: g1+g2/setup.num_batches, grads, grad_batch)
     # Large Batch
     if not setup.small_batch:
         for i in range(5):
-            # updates, opt_state[i] = jit(optimizer.update)(grads[i], opt_state[i])
-            updates, opt_state[i] = optimizer.update(grads[i], opt_state[i], loss)
+            opt_state[i].hyperparams['f'] = loss
+            updates, opt_state[i] = jit(optimizer.update)(grads[i], opt_state[i])
             params[i] = jit(optax.apply_updates)(params[i], updates)
 
     return params, opt_state, loss
@@ -476,31 +460,15 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
         
         train_coarse = jit(vmap(jit(vmap(get_coarse, in_axes=(0,))),in_axes=(0,)))(data_train)
         test_coarse = jit(vmap(jit(vmap(get_coarse, in_axes=(0,))),in_axes=(0,)))(data_test)
-        
-        # fig = plt.figure()
-        # fig.add_subplot(2,1,1)
-        # plt.plot(jnp.linspace(0,2,setup.nx_fine),jnp.concatenate(data_train[0,0,0],axis=None),label='Init Fine')
-        # plt.plot(jnp.linspace(0,2,setup.nx_fine),jnp.concatenate(data_train[0,0,int(setup.nt/2)],axis=None),label=f't={setup.nt*setup.dt/2} Fine')
-        # plt.plot(jnp.linspace(0,2,setup.nx_fine),jnp.concatenate(data_train[0,0,-1],axis=None),label='Final Fine')
 
-        # fig.add_subplot(2,1,2)
-        # plt.plot(jnp.linspace(0,2,setup.nx),jnp.concatenate(train_coarse[0,0,0],axis=None),label='Init Coarse')
-        # plt.plot(jnp.linspace(0,2,setup.nx),jnp.concatenate(train_coarse[0,0,int(setup.nt/2)],axis=None),label=f't={setup.nt*setup.dt/2} Coarse')
-        # plt.plot(jnp.linspace(0,2,setup.nx),jnp.concatenate(train_coarse[0,0,-1],axis=None),label='Final Coarse')
-        # fig.legend()
-        # plt.show()
-        # sequence data
         train_seq = jnp.array([train_coarse[:,:, ii:(ii+setup.ns+2), ...] for ii in range(setup.nt-setup.ns-1)])
         train_seq = jnp.moveaxis(train_seq,0,2)
         del train_coarse
 
         t1 = time.time()
 
-        # with mra.Tracker(f"memory/memray_out{epoch}.bin"):
         params_new, opt_state_new, loss_new = update(state.params, state.opt_state, train_seq)
         state = TrainingState(params_new,opt_state_new,loss_new)
-
-        # call test function
         test_err, err_hist, merr, merr_hist = evaluate(state.params, test_coarse)
 
         t2 = time.time()
@@ -535,7 +503,7 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
             del merr_hist
         # pd.concat(axis=1)
         err_hist_table = wandb.Table(data=err_hist_df)
-        weight_im = wandb.Image(state.params[0]['linear']['w'],'F','Linear Density Weights')
+        weight_im = wandb.Image(state.params[0]['mc_t_net_dense/~_create_net/linear']['w'],'F','Linear Density Weights')
         wandb.log({
             "Train loss": float(state.loss),
             "Test Error": float(test_err),
@@ -677,28 +645,22 @@ if __name__ == "__main__":
     u_init = jnp.zeros((1,setup.nx,setup.ny,setup.nz))
     initial_params = net.init(jrand.PRNGKey(setup.num_epochs), u_init)
     z_params = jtr.tree_map(lambda p: jnp.zeros_like(p), initial_params)
-    initial_params = [initial_params] + [z_params]*4 # only density matters for linear advection, but JF uses all 5 cons
+    initial_params = [initial_params]*2 + [z_params]*2 + [initial_params] # v and w velocity component do not matter in 1D
     del u_init
     if setup.load_warm or setup.load_last:
         # loads warm params, always uses last.pkl over warm.pkl if available and toggled on
         if setup.load_last and os.path.exists(os.path.join(param_path,'last.pkl')):
-            last_params = load_params(param_path,'last.pkl')    
-            # if compare_params(last_params,initial_params):
+            last_params = load_params(param_path,'last.pkl')
             print("\n"+"-"*5+"Using Last Params"+"-"*5+"\n")
             initial_params = last_params
-            # else:
-            #     os.system('rm {}'.format(os.path.join(param_path,'last.pkl')))
             del last_params
         elif setup.load_warm and os.path.exists(os.path.join(param_path,'warm.pkl')):
-            warm_params = load_params(param_path,'warm.pkl')    
-            # if compare_params(warm_params,initial_params):
+            warm_params = load_params(param_path,'warm.pkl')
             print("\n"+"-"*5+"Using Warm-Start Params"+"-"*5+"\n")
             initial_params = warm_params
-            # else:
-            #     os.system('rm {}'.format(os.path.join(param_path,'warm.pkl')))
             del warm_params
 
-    initial_opt_state = [optimizer.init(initial_params[i]) for i in range(5)]
+    initial_opt_state = [jit(optimizer.init)(initial_params[i]) for i in range(5)]
 
     state = TrainingState(initial_params, initial_opt_state, 0)
 
