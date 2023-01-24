@@ -404,57 +404,56 @@ class SimulationManager:
                 tangent = jnp.zeros_like(primes_real)
                 tangent = tangent.at[0].set(jnp.reshape(net.apply(params,primes_real[0]),tangent[0].shape))
                 primes = self.time_integrator.integrate(primes,tangent,timestep_size,stage)
-                primes = primes.at[1::3,4:104].set(1)
-                primes = primes.at[2:4,4:104].set(0)
-                cons = get_conservatives_from_primitives(primes,self.material_manager)
-                
-                residual_interface = None
-            else:
-                # RIGHT HAND SIDE
-                rhs_cons, rhs_levelset, residual_interface = self.space_solver.compute_rhs(
-                    cons, primes, current_time_stage, 
-                    levelset, volume_fraction, apertures, 
-                    forcings_dictionary, 
-                    ml_parameters_dict, ml_networks_dict)
+                rho = primes[1::3,4:104]
+                        
+            # RIGHT HAND SIDE
+            rhs_cons, rhs_levelset, residual_interface = self.space_solver.compute_rhs(
+                cons, primes, current_time_stage, 
+                levelset, volume_fraction, apertures, 
+                forcings_dictionary, 
+                ml_parameters_dict, ml_networks_dict)
 
-                # TRANSFORM TO CONSERVATIVES
-                if self.input_reader.levelset_type != None:
-                    cons = self.levelset_handler.transform_to_conservatives(cons, volume_fraction)
+            # TRANSFORM TO CONSERVATIVES
+            if self.input_reader.levelset_type != None:
+                cons = self.levelset_handler.transform_to_conservatives(cons, volume_fraction)
 
-                # PREPARE BUFFER FOR RUNGE KUTTA INTEGRATION
-                if stage > 0:
-                    cons = self.time_integrator.prepare_buffer_for_integration(cons, init_cons, stage)
-                    if self.input_reader.levelset_type in ["FLUID-FLUID", "FLUID-SOLID-DYNAMIC"]:
-                        levelset = self.time_integrator.prepare_buffer_for_integration(levelset, init_levelset, stage)
-
-                # INTEGRATE
-                cons = self.time_integrator.integrate(cons, rhs_cons, timestep_size, stage)
+            # PREPARE BUFFER FOR RUNGE KUTTA INTEGRATION
+            if stage > 0:
+                cons = self.time_integrator.prepare_buffer_for_integration(cons, init_cons, stage)
                 if self.input_reader.levelset_type in ["FLUID-FLUID", "FLUID-SOLID-DYNAMIC"]:
-                    levelset_new = self.time_integrator.integrate(levelset, rhs_levelset, timestep_size, stage)
-                    
-                    # REINITIALIZE
-                    if self.input_reader.levelset_type == "FLUID-FLUID" and stage == self.time_integrator.no_stages - 1 and reinitialize:
-                        levelset_new, residual_reinit   = self.levelset_handler.reinitialize(levelset_new, False)
-                    else:
-                        residual_reinit = 0.0
+                    levelset = self.time_integrator.prepare_buffer_for_integration(levelset, init_levelset, stage)
 
-                    # LEVELSET BOUNDARIES AND INTERFACE RECONSTRUCTION
-                    levelset_new                        = self.boundary_condition.fill_boundary_levelset(levelset_new)
-                    volume_fraction_new, apertures_new  = self.levelset_handler.compute_volume_fraction_and_apertures(levelset_new)
+            # INTEGRATE
+            cons = self.time_integrator.integrate(cons, rhs_cons, timestep_size, stage)
+            if self.input_reader.levelset_type in ["FLUID-FLUID", "FLUID-SOLID-DYNAMIC"]:
+                levelset_new = self.time_integrator.integrate(levelset, rhs_levelset, timestep_size, stage)
                 
-                elif self.input_reader.levelset_type == "FLUID-SOLID-STATIC":
-                    levelset_new, volume_fraction_new, apertures_new = levelset, volume_fraction, apertures
-
-                # MIXING AND PRIME EXTENSION
-                if self.input_reader.levelset_type != None:
-                    cons, mask_small_cells = self.levelset_handler.mixing(cons, levelset_new, volume_fraction_new, volume_fraction)
-                    cons    = self.levelset_handler.transform_to_volume_averages(cons, volume_fraction_new)
-                    primes  = self.levelset_handler.compute_primitives_from_conservatives_in_real_fluid(cons, primes, levelset_new, volume_fraction_new, mask_small_cells)
-                    cons, primes, residual_primes           = self.levelset_handler.extend_primes(cons, primes, levelset_new, volume_fraction_new, current_time_stage, mask_small_cells)
-                    levelset, volume_fraction, apertures    = levelset_new, volume_fraction_new, apertures_new
+                # REINITIALIZE
+                if self.input_reader.levelset_type == "FLUID-FLUID" and stage == self.time_integrator.no_stages - 1 and reinitialize:
+                    levelset_new, residual_reinit   = self.levelset_handler.reinitialize(levelset_new, False)
                 else:
-                    primes = get_primitives_from_conservatives(cons, self.material_manager)
+                    residual_reinit = 0.0
+
+                # LEVELSET BOUNDARIES AND INTERFACE RECONSTRUCTION
+                levelset_new                        = self.boundary_condition.fill_boundary_levelset(levelset_new)
+                volume_fraction_new, apertures_new  = self.levelset_handler.compute_volume_fraction_and_apertures(levelset_new)
             
+            elif self.input_reader.levelset_type == "FLUID-SOLID-STATIC":
+                levelset_new, volume_fraction_new, apertures_new = levelset, volume_fraction, apertures
+
+            # MIXING AND PRIME EXTENSION
+            if self.input_reader.levelset_type != None:
+                cons, mask_small_cells = self.levelset_handler.mixing(cons, levelset_new, volume_fraction_new, volume_fraction)
+                cons    = self.levelset_handler.transform_to_volume_averages(cons, volume_fraction_new)
+                primes  = self.levelset_handler.compute_primitives_from_conservatives_in_real_fluid(cons, primes, levelset_new, volume_fraction_new, mask_small_cells)
+                cons, primes, residual_primes           = self.levelset_handler.extend_primes(cons, primes, levelset_new, volume_fraction_new, current_time_stage, mask_small_cells)
+                levelset, volume_fraction, apertures    = levelset_new, volume_fraction_new, apertures_new
+            else:
+                primes = get_primitives_from_conservatives(cons, self.material_manager)
+
+            if self.input_reader.numerical_setup['conservatives']['convective_fluxes']['riemann_solver'] == "MCTANGENT":
+                primes = primes.at[0,4:104].set(rho)
+
             current_time_stage = current_time + timestep_size*self.time_integrator.timestep_increment_factor[stage]
 
             # FILL BOUNDARIES

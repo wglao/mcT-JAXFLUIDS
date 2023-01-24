@@ -38,7 +38,7 @@ load_last = False
 # keep track of epochs if interrupted
 last_epoch = 21 if load_last else 0
 
-small_batch = False
+small_batch = True
 
 vis_flag = False
 
@@ -71,7 +71,7 @@ nr = 1
 
 num_epochs = int(300)
 learning_rate = 1e-3
-batch_size = 10
+batch_size = 4
 layers = 0
 hidden_size = 10000
 activation = "None"
