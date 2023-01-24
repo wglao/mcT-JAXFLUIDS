@@ -395,7 +395,7 @@ class SimulationManager:
 
         # LOOP STAGES
         for stage in range( self.time_integrator.no_stages ):
-            if self.input_reader.numerical_setup['conservatives']['convective_fluxes']['riemann_solver'] == "MCTANGENT":
+            if "MCTANGENT" in ml_networks_dict.keys():
                 # NN FORWARD PASS
                 # with primes
                 params = ml_parameters_dict['MCTANGENT']
@@ -451,7 +451,7 @@ class SimulationManager:
             else:
                 primes = get_primitives_from_conservatives(cons, self.material_manager)
 
-            if self.input_reader.numerical_setup['conservatives']['convective_fluxes']['riemann_solver'] == "MCTANGENT":
+            if "MCTANGENT" in ml_networks_dict.keys():
                 primes = primes.at[0,4:104].set(rho)
 
             current_time_stage = current_time + timestep_size*self.time_integrator.timestep_increment_factor[stage]

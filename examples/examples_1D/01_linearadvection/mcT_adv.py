@@ -147,7 +147,6 @@ def get_loss_batch(params: hk.Params, batch:jnp.ndarray, sim: dat.Sim, seed: int
     coarse_case['domain']['x']['cells'] = setup.nx
     coarse_num['conservatives']['time_integration']['fixed_timestep'] = setup.dt
     coarse_num['conservatives']['time_integration']['time_integrator'] = setup.integrator
-    coarse_num['conservatives']['convective_fluxes']['riemann_solver'] = "MCTANGENT"
 
     ml_parameters_dict = {"MCTANGENT":params}
     ml_networks_dict = hk.data_structures.to_immutable_dict({"MCTANGENT": net})
@@ -203,7 +202,6 @@ def get_loss_batch(params: hk.Params, batch:jnp.ndarray, sim: dat.Sim, seed: int
     # resequence for each R seq
     ml_rseqs = jnp.concatenate(vmap(get_rseqs,in_axes=(0,))(ml_pred_arr_R))
 
-    coarse_num['conservatives']['convective_fluxes']['riemann_solver'] = "HLLC"
     input_reader = InputReader(coarse_case,coarse_num)
     sim_manager = SimulationManager(input_reader)
     
@@ -218,8 +216,8 @@ def get_loss_batch(params: hk.Params, batch:jnp.ndarray, sim: dat.Sim, seed: int
         setup.nr,
         coarse_case['general']['save_dt'],
         0.0, 1,
-        ml_parameters_dict,
-        ml_networks_dict
+        None,
+        None
     )
     mc_pred_arr = jnp.array(mc_pred_arr[1:])
     mc_pred_arr = jnp.nan_to_num(mc_pred_arr)
