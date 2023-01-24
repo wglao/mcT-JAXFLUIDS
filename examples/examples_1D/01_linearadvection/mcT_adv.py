@@ -209,7 +209,7 @@ def get_loss_batch(params: hk.Params, batch:jnp.ndarray, sim: dat.Sim, seed: int
     
     #  map over times, concatenate all sequences
     mc_primes_init = jnp.concatenate(jnp.concatenate(
-        (jnp.swapaxes(jnp.reshape(ml_primes_init,(setup.nt-setup.ns-1,5,1,setup.nx,1,1)),1,2),
+        (jnp.swapaxes(jnp.reshape(ml_primes_init,(setup.batch_size*(setup.nt-setup.ns-1),5,1,setup.nx,1,1)),1,2),
         jnp.swapaxes(ml_pred_arr,1,2)),axis=1))
 
     mc_pred_arr, _ = sim_manager.feed_forward(
