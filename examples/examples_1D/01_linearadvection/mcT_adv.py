@@ -128,18 +128,18 @@ def get_rseqs(k_pred: jnp.ndarray) -> jnp.ndarray:
         rseqs = rseqs.at[i].set(rseq_i)
     return rseqs
 
-def get_loss_sample(params: hk.Params, sample:jnp.ndarray, sim: dat.Sim, seed: int) -> float:
+def get_loss_batch(params: hk.Params, batch:jnp.ndarray, sim: dat.Sim, seed: int) -> float:
     """
     Uses a highly resolved simulation as ground truth to calculate loss over a sample
     
     ----- inputs -----\n
     :param params: holds parameters of the NN
-    :param sample: training data for one sample, of shape [sequences, primes, timesteps, xs(, ys, zs)]
-    :param sim: contains information about the truth simulation
+    :param batch: training data for one batch, of shape [sample, sequences, primes, timesteps, xs(, ys, zs)]
+    :param sim: structure containing information about the truth simulations
     :param seed: seed number, used as an rng seed for noise
 
     ----- returns -----\n
-    :return loss_sample: average loss over all sequences in the sample
+    :return loss_batch: average loss over all sequences in the batch
     """
     # feed forward with mcTangent ns+1 steps
     coarse_case = sim.case
@@ -154,14 +154,16 @@ def get_loss_sample(params: hk.Params, sample:jnp.ndarray, sim: dat.Sim, seed: i
 
     input_reader = InputReader(coarse_case,coarse_num)
     sim_manager = SimulationManager(input_reader)
-
+    
+    # concatenate all samples as one batch
+    sample = jnp.concatenate(batch,axis=0)
     ml_primes_init = sample[:,:,0,...]
     # ml_primes_init = jnp.moveaxis(ml_primes_init,2,1)
     if setup.noise_flag:
         ml_primes_init = vmap(add_noise, in_axes=(0,None))(ml_primes_init,seed)
 
 
-    # feed_forward_sample = vmap(sim_manager.feed_forward, in_axes=(0,None,None,None,None,None,None,None), out_axes=(0,0))
+    # feed_forward_batch = vmap(sim_manager.feed_forward, in_axes=(0,None,None,None,None,None,None,None), out_axes=(0,0))
     ml_pred_arr, _ = sim_manager.feed_forward(
         ml_primes_init,
         None, # not needed for single-phase, but is a required arg for feed_forward
@@ -413,25 +415,24 @@ def update(params: Iterable[hk.Params], opt_state: Iterable[optax.OptState], dat
         sim_batch_index = lax.dynamic_slice_in_dim(jnp.arange(setup.num_train),ii*setup.batch_size,setup.batch_size)
         sims_batch = sims[sim_batch_index[0]:sim_batch_index[-1]+1]
 
-        for jj, (sample, sim) in enumerate(zip(batch, sims_batch)):
-            loss_sample, grad_sample = value_and_grad(get_loss_sample, argnums=0)(params, sample, sim, 1+jj+ii*setup.batch_size)
-            loss_batch += loss_sample/setup.batch_size
-            grad_sample = jax.tree_map(jnp.nan_to_num, grad_sample)
-            grad_batch = jax.tree_map(lambda g1, g2: g1+g2/setup.batch_size, grad_batch, grad_sample)
+        # all sims have the same setup, initial condition is taken from the data
+        loss_batch, grad_batch = value_and_grad(get_loss_batch, argnums=0)(
+            params, batch, sims_batch[0], ii
+            )
+        grad_batch = jax.tree_map(jnp.nan_to_num, grad_batch)
+
         # Small Batch
         if setup.small_batch:
-            for i in range(5):
-                opt_state[i].hyperparams['f'] = loss_batch
-                updates, opt_state[i] = jit(optimizer.update)(grad_batch[i], opt_state[i])
-                params[i] = jit(optax.apply_updates)(params[i], updates)
+            opt_state.hyperparams['f'] = loss_batch
+            updates, opt_state = jit(optimizer.update)(grad_batch, opt_state)
+            params = jit(optax.apply_updates)(params, updates)
         loss += loss_batch/setup.num_batches
         grads = jax.tree_map(lambda g1, g2: g1+g2/setup.num_batches, grads, grad_batch)
     # Large Batch
     if not setup.small_batch:
-        for i in range(5):
-            opt_state[i].hyperparams['f'] = loss
-            updates, opt_state[i] = jit(optimizer.update)(grads[i], opt_state[i])
-            params[i] = jit(optax.apply_updates)(params[i], updates)
+        opt_state.hyperparams['f'] = loss
+        updates, opt_state = jit(optimizer.update)(grads, opt_state)
+        params = jit(optax.apply_updates)(params, updates)
 
     return params, opt_state, loss
 
@@ -642,11 +643,9 @@ def visualize():
 if __name__ == "__main__":
     # os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
-    # data input will be each variable separately
+    # data input will be rho(x,t)
     u_init = jnp.zeros((1,setup.nx,setup.ny,setup.nz))
     initial_params = net.init(jrand.PRNGKey(setup.num_epochs), u_init)
-    z_params = jtr.tree_map(lambda p: jnp.zeros_like(p), initial_params)
-    initial_params = [initial_params]*2 + [z_params]*2 + [initial_params] # v and w velocity component do not matter in 1D
     del u_init
     if setup.load_warm or setup.load_last:
         # loads warm params, always uses last.pkl over warm.pkl if available and toggled on
@@ -661,7 +660,7 @@ if __name__ == "__main__":
             initial_params = warm_params
             del warm_params
 
-    initial_opt_state = [jit(optimizer.init)(initial_params[i]) for i in range(5)]
+    initial_opt_state = jit(optimizer.init)(initial_params)
 
     state = TrainingState(initial_params, initial_opt_state, 0)
 
