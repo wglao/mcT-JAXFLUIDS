@@ -223,7 +223,6 @@ def get_loss_batch(params: hk.Params, batch:jnp.ndarray, sim: dat.Sim, seed: int
         None
     )
     mc_pred_arr = jnp.array(mc_pred_arr[1:])
-    mc_pred_arr = jnp.nan_to_num(mc_pred_arr)
     mc_pred_arr = jnp.moveaxis(mc_pred_arr,0,1)
     
     # mc loss with rho only
