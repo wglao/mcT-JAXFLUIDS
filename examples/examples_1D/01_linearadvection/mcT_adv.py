@@ -433,8 +433,7 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
     min_err = sys.float_info.max
     epoch_min = -1
     best_state = state
-    err_hist_list = []
-    err_hist_df = pd.DataFrame(data = {'Time': jnp.linspace(setup.dt,int(setup.t_max*setup.test_ratio),int(setup.nt*setup.test_ratio))})
+    err_hist_dict = {'Time': jnp.linspace(setup.dt,int(setup.t_max*setup.test_ratio),int(setup.nt*setup.test_ratio))}
     for epoch in range(setup.last_epoch,setup.num_epochs):
         # reset each epoch
         state = TrainingState(state.params,state.opt_state,0)
@@ -478,13 +477,13 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
 
         
         dat.data.check_sims()
-        err_hist_df[f"MCT_err_ep{epoch}_{setup.ns}s{setup.nr}r"] =  err_hist
+        err_hist_dict[f"MCT_err_ep{epoch}_{setup.ns}s{setup.nr}r"] =  err_hist
         if epoch == setup.last_epoch:
-            err_hist_df[f"HLLC_err"] =  merr_hist
+            err_hist_dict[f"HLLC_err"] =  merr_hist
         else:
             del merr_hist
         # pd.concat(axis=1)
-        err_hist_table = wandb.Table(data=err_hist_df)
+        err_hist_table = wandb.Table(data=pd.concat(err_hist_dict,axis=1))
         weight_arr = jax.device_get(state.params['mc_t_net_dense/~_create_net/linear']['w'])
         weight_im = wandb.Image(weight_arr,caption='Linear Density Weights')
         wandb.log({

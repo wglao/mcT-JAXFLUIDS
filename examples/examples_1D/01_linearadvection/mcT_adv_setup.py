@@ -71,15 +71,15 @@ nr = 1
 
 num_epochs = int(300)
 learning_rate = 1e-3
-batch_size = 4
+batch_size = 1
 layers = 0
 hidden_size = 10000
 activation = "None"
 
 # sample set size
-num_train = 40
-num_test = 10
-test_ratio = 1.5
+num_train = 1
+num_test = 1
+test_ratio = 2
 
 # define batch by number of sequences trained on, instead of samples
 num_batches = int(np.ceil(num_train/batch_size))
