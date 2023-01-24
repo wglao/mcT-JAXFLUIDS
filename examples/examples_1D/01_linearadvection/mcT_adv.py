@@ -396,7 +396,7 @@ def update(params: Iterable[hk.Params], opt_state: Iterable[optax.OptState], dat
         # all sims have the same setup, initial condition is taken from the data
         loss_batch, grad_batch = value_and_grad(get_loss_batch, argnums=0)(
             params, batch, sims_batch[0], ii
-            )
+        )
         grad_batch = jax.tree_map(jnp.nan_to_num, grad_batch)
 
         # Small Batch
