@@ -176,8 +176,8 @@ def get_loss_batch(params: hk.Params, batch:jnp.ndarray, sim: dat.Sim, seed: int
     ml_pred_arr = jnp.array(ml_pred_arr[1:])
     ml_pred_arr = jnp.moveaxis(ml_pred_arr,0,2)
 
-    # ml loss
-    ml_loss_sample = mse(ml_pred_arr, sample[:,:,1:,...])
+    # ml loss with density only
+    ml_loss_sample = mse(ml_pred_arr[:,0,...], sample[:,0,1:,...])
 
     if not setup.mc_flag or setup.nr < 1:
         return ml_loss_sample
@@ -224,9 +224,9 @@ def get_loss_batch(params: hk.Params, batch:jnp.ndarray, sim: dat.Sim, seed: int
     mc_pred_arr = jnp.array(mc_pred_arr[1:])
     mc_pred_arr = jnp.nan_to_num(mc_pred_arr)
     mc_pred_arr = jnp.moveaxis(mc_pred_arr,0,1)
-    # mc_rseqs = vmap(get_rseqs,in_axes=(0,))(mc_pred_arr)
-
-    mc_loss_sample = setup.mc_alpha/setup.nr * mse(ml_rseqs,mc_pred_arr)
+    
+    # mc loss with rho only
+    mc_loss_sample = setup.mc_alpha/setup.nr * mse(ml_rseqs[:,0,...],mc_pred_arr[:,0,...])
     loss_sample = ml_loss_sample + mc_loss_sample
     return loss_sample
 
