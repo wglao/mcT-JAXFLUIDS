@@ -24,6 +24,7 @@ config.update("jax_disable_jit", False)
 config.update("jax_enable_x64", True)
 
 """parameters for initializing mcTangent"""
+os.environ["PROJ"] = '/home/wglao/Documents/PHO-ICES/mcT-JAXFLUIDS/examples/examples_1D/02_sod'
 proj = functools.partial(os.path.join,os.environ["PROJ"])
 save_path = proj('data')
 parallel_flag = False
@@ -42,15 +43,15 @@ small_batch = True
 
 vis_flag = False
 
-case_name = 'mcT_adv'
+case_name = 'mcT_sod'
 
 u = 1.0
 
-t_max = 2.0
-nt = 200
+t_max = 0.2
+nt = 100
 dt = t_max/nt
 
-x_max = 2.0
+x_max = 1.0
 nx = 100
 dx = x_max/float(nx)
 
@@ -62,8 +63,6 @@ nz_fine = nz
 cfl = u*dt/dx
 integrator = "RK3"
 
-assert cfl <= 1, "Bad CFL Condition for Explicit Solvers"
-
 mc_alpha = 1e5 if mc_flag else 0
 noise_level = 0.02 if noise_flag else 0
 ns = 1
@@ -71,10 +70,10 @@ nr = 1
 
 num_epochs = int(300)
 learning_rate = 1e-3
-batch_size = 4
-layers = 0
-hidden_size = 10000
-activation = "None"
+batch_size = 1
+layers = 1
+hidden_size = (5*nx)**2
+activation = "relu"
 
 # sample set size
 num_train = 1
