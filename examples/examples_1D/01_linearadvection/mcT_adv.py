@@ -179,12 +179,11 @@ def get_loss_batch(params: hk.Params, batch:jnp.ndarray, sim: dat.Sim, seed: int
     # ml loss
     ml_loss_sample = mse(ml_pred_arr, sample[:,:,1:,...])
 
-    if not setup.mc_flag:
+    if not setup.mc_flag or setup.nr < 1:
         return ml_loss_sample
     
     # mc loss
     # ff R additional steps
-    min_rho = jnp.min(sample[0,0,0,...])
     ml_primes_init_R = ml_pred_arr[:,:,-1,...]
 
     ml_pred_arr_R, _ = sim_manager.feed_forward(
@@ -212,25 +211,6 @@ def get_loss_batch(params: hk.Params, batch:jnp.ndarray, sim: dat.Sim, seed: int
     mc_primes_init = jnp.concatenate(jnp.concatenate(
         (jnp.swapaxes(jnp.reshape(ml_primes_init,(setup.nt-setup.ns-1,5,1,setup.nx,1,1)),1,2),
         jnp.swapaxes(ml_pred_arr,1,2)),axis=1))
-
-    # enforce realistic bounds
-    # jax.config.update("jax_disable_jit", True)
-
-    # mc_primes_init = mc_primes_init.at[:,0,...].set(jnp.where(mc_primes_init[:,0,...]<min_rho,
-    #                                                 jnp.full_like(mc_primes_init[:,0,...],min_rho),
-    #                                                 mc_primes_init[:,0,...]))
-    # mc_primes_init = mc_primes_init.at[:,1,...].set(jnp.ones_like(mc_primes_init[:,1,...]))
-    # mc_primes_init = mc_primes_init.at[:,2:3,...].set(jnp.zeros_like(mc_primes_init[:,2:3,...]))
-    # mc_primes_init = mc_primes_init.at[:,4,...].set(jnp.ones_like(mc_primes_init[:,4,...]))
-    # for ii, primes in enumerate(mc_primes_init):
-    #     plt.plot(jnp.linspace(*coarse_case['domain']['x']['range'],num=coarse_case['domain']['x']['cells']),jax.device_get(jnp.concatenate(primes[0],axis=None)).primal)
-    #     plt.title(f"{ii+1} / {mc_primes_init.shape[0]}")
-    #     plt.show()
-    # print(jnp.sum(mc_primes_init[:,0,...].primal<=0))
-    # print(jnp.sum(mc_primes_init[:,2:3,...].primal!=0))
-    # print(jnp.sum(mc_primes_init[:,4,...].primal<=0))
-    # jax.config.update("jax_disable_jit", False)
-
 
     mc_pred_arr, _ = sim_manager.feed_forward(
         mc_primes_init,
