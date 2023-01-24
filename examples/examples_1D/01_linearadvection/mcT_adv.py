@@ -484,7 +484,7 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
             del merr_hist
         # pd.concat(axis=1)
         err_hist_table = wandb.Table(data=err_hist_df)
-        weight_arr = jax.device_get(state.params[0]['mc_t_net_dense/~_create_net/linear']['w'])
+        weight_arr = jax.device_get(state.params['mc_t_net_dense/~_create_net/linear']['w'])
         weight_im = wandb.Image(weight_arr,caption='Linear Density Weights')
         wandb.log({
             "Train loss": float(state.loss),
