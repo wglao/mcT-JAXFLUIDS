@@ -71,7 +71,7 @@ nr = 1
 
 num_epochs = int(300)
 learning_rate = 1e-3
-batch_size = 4
+batch_size = 1
 layers = 0
 hidden_size = 10000
 activation = "None"
