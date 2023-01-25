@@ -22,9 +22,9 @@ import optax
 from jaxfluids import InputReader, Initializer, SimulationManager
 from jaxfluids.post_process import load_data
 
-import setup as setup
-import data as dat
-from data import Sim
+import mcTangent.mcT_setup as setup
+import mcTangent.mcT_data as dat
+from mcTangent.mcT_data import Sim
 
 """
 Train mcTangent to solve linear advection using JAX-Fluids
