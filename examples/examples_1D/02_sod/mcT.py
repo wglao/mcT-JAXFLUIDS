@@ -55,10 +55,7 @@ class TrainingState(NamedTuple):
     opt_state: Iterable[optax.OptState]
     loss: float
 
-from mcT_adv_setup import save_params, load_params, compare_params, mse, net, optimizer
-
-mse = setup.mse
-
+from mcT_sod_setup import save_params, load_params, mse, net, optimizer, mse
 
 @jit
 def get_coarse(data_fine: jnp.ndarray) -> jnp.ndarray:

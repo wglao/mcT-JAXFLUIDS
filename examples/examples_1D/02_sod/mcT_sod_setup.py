@@ -30,8 +30,8 @@ save_path = proj('data')
 parallel_flag = False
 
 # data only = False, False
-mc_flag = True
-noise_flag = True
+mc_flag = False
+noise_flag = False
 
 # use warm params
 load_warm = False
@@ -132,21 +132,18 @@ def pos_coefs(seed: int, out_shape: Union[tuple,int]) -> jnp.ndarray:
     """
     key = jrand.PRNGKey(seed)
     if type(out_shape) == int:
-        return jnp.square(jrand.normal(key,(out_shape,))) + jnp.finfo(jnp.float32).eps #strictly positive
-    return jnp.square(jrand.normal(key,out_shape)) + jnp.finfo(jnp.float32).eps #strictly positive
+        return np.abs(jnp.sqrt(0.5)*jrand.normal(key,(out_shape,)) + jnp.sqrt(0.5)) + jnp.finfo(jnp.float32).eps #strictly positive
+    return jnp.abs(jnp.sqrt(0.5)*jrand.normal(key,out_shape) + jnp.sqrt(0.5)) + jnp.finfo(jnp.float32).eps #strictly positive
 
 def get_cases() -> Cases:
     case_list = []
     for seed in seeds_to_gen:
         case_new = copy.deepcopy(case_base)
-        coefs = pos_coefs(seed,5)
-        rho0 = "lambda x: 1+"+\
-            "((x>=0.2) & (x<=0.4)) * ( {0}*(np.exp(-334.477 * (x-0.3-0.005)**2) + np.exp(-334.477 * (x - 0.3 + 0.005)**2) + 4 * np.exp(-334.477 * (x - 0.3)**2))) + "+\
-            "((x>=0.6) & (x<=0.8)) * {1} + "+\
-            "((x>=1.0) & (x<=1.2)) * ({2} - np.abs(10 * (x - 1.1))) + "+\
-            "((x>=1.4) & (x<=1.6)) * ({3}* (np.sqrt(np.maximum( 1 - 100 * (x - 1.5 - 0.005)**2, 0)) + np.sqrt(np.maximum( 1 - 100 * (x - 1.5 + 0.005)**2, 0)) + 4 * np.sqrt(np.maximum( 1 - 100 * (x - 1.5)**2, 0))) ) + "+\
-            "~( ((x>=0.2) & (x<=0.4)) | ((x>=0.6) & (x<=0.8)) | ((x>=1.0) & (x<=1.2)) | ((x>=1.4) & (x<=1.6)) ) *{4}"
-        case_new['initial_condition']['rho'] = rho0.format(*coefs)
+        coefs = pos_coefs(seed,3)
+        rho0 = f"lambda x: 1.0*(x <= {coefs[2]}) + {coefs[0]}*(x > {coefs[2]})",
+        p0 = f"lambda x: 1.0*(x <= {coefs[2]}) + {coefs[1]}*(x > {coefs[2]})",
+        case_new['initial_condition']['rho'] = rho0
+        case_new['initial_condition']['p'] = p0
 
         case_list.append(case_new)
 
@@ -255,8 +252,8 @@ if __name__ == "__main__":
     from jaxfluids.post_process import load_data
     from jaxfluids import InputReader, Initializer, SimulationManager
 
-    import mcT_adv_data as dat
-    from mcT_adv import get_coarse
+    import mcT_data as dat
+    from mcT import get_coarse
     
     cache_path = '.test_cache'
     # optimizer = optax.adam(1e-3)
