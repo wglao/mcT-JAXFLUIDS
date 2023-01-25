@@ -5,8 +5,19 @@ import wandb
 import numpy as np
 import jax.random as jrand
 import jax.numpy as jnp
+from jax import config
 """parameters for initializing mcTangent"""
-save_path = 'data'
+"""debugging and config"""
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+# os.environ["XLA_FLAGS"] = "--xla_dump_to=/tmp/foo"
+config.update("jax_debug_nans", False)
+config.update("jax_disable_jit", False)
+config.update("jax_enable_x64", True)
+
+"""parameters for initializing mcTangent"""
+proj = functools.partial(os.path.join,os.environ["PROJ"])
+save_path = proj('data')
 
 class Cases():
     """

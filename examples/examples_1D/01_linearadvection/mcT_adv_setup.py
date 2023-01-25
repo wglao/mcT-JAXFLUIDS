@@ -13,7 +13,7 @@ from jax import jit
 from jax.config import config
 from jaxfluids.time_integration import DICT_TIME_INTEGRATION
 
-import mcTangent as mct
+from mcTangent import nn
 
 """debugging and config"""
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
@@ -188,9 +188,8 @@ def mse(pred: jnp.ndarray, true: Optional[jnp.ndarray] = None) -> float:
 #     return tangent_i
 # net = hk.without_apply_rng(hk.transform(mcT_fn))
 
-net = hk.without_apply_rng(mct.nn.create('dense',layers,hidden_size,activation,nx))
+net = hk.without_apply_rng(nn.create('dense',layers,hidden_size,activation,nx))
 # optimizer = optax.adam(learning_rate)
-# optimizer = mct.nn.eve()
 optimizer = optax.eve()
 
 def save_params(params: hk.Params, path: str, filename: Optional[str] = None) -> None:
