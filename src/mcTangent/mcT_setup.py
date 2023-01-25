@@ -1,11 +1,20 @@
-from typing import Union, Tuple, NamedTuple
-import os
+from typing import Union, Tuple, NamedTuple, Optional, Iterable
+import os, functools, sys, copy
 import json
+import pickle
 import wandb
 import numpy as np
+import haiku as hk
+import optax
+import jax
 import jax.random as jrand
 import jax.numpy as jnp
-from jax import config
+from jax import jit
+from jax.config import config
+from jaxfluids.time_integration import DICT_TIME_INTEGRATION
+
+from mcTangent import nn
+
 """parameters for initializing mcTangent"""
 """debugging and config"""
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
