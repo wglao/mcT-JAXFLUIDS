@@ -8,7 +8,6 @@ import numpy as np
 import re
 import matplotlib.pyplot as plt
 import json
-import memray as mra
 
 import jax
 import jax.numpy as jnp

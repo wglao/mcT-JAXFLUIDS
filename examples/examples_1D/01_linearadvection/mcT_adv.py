@@ -8,7 +8,6 @@ import numpy as np
 import re
 import matplotlib.pyplot as plt
 import json
-import memray as mra
 
 import jax
 import jax.numpy as jnp
@@ -56,8 +55,6 @@ class TrainingState(NamedTuple):
     loss: float
 
 from mcT_adv_setup import save_params, load_params, compare_params, mse, net, optimizer
-
-mse = setup.mse
 
 
 @jit
