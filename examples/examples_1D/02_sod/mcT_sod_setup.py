@@ -43,7 +43,7 @@ small_batch = True
 
 vis_flag = False
 
-case_name = 'mcT_sod'
+case_name = 'sod'
 
 u = 1.0
 
@@ -76,7 +76,7 @@ hidden_size = (5*nx)**2
 activation = "relu"
 
 # sample set size
-num_train = 1
+num_train = 0
 num_test = 1
 test_ratio = 2
 
