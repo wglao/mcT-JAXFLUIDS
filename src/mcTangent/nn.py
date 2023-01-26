@@ -58,7 +58,7 @@ class mcT_net_dense(hk.Module):
         self._create_net()
     
     def __call__(self, input):
-        out = net(jnp.ravel(input))
+        out = self.net(jnp.ravel(input))
         return jnp.reshape(out, (input.shape))
 
     def _create_net(self):
