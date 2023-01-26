@@ -401,7 +401,8 @@ class SimulationManager:
                 params = ml_parameters_dict['MCTANGENT']
                 net = ml_networks_dict['MCTANGENT']
                 primes_real = primes[:,4:104]
-                tangent = net.apply(params,primes_real)
+                tangent = jnp.zeros_like(primes_real)
+                tangent = tangent.at[0].set(jnp.reshape(net.apply(params,primes_real[0]),tangent[0].shape))
                 primes = self.time_integrator.integrate(primes,tangent,timestep_size,stage)
                 primes = primes.at[1::3,4:104].set(1)
                 primes = primes.at[2:4,4:104].set(0)

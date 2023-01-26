@@ -620,8 +620,8 @@ def visualize():
 if __name__ == "__main__":
     # os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
-    # data input will be rho(x,t)
-    u_init = jnp.zeros((1,setup.nx,setup.ny,setup.nz))
+    # data input will be u(x,t)
+    u_init = jnp.zeros((5,setup.nx,setup.ny,setup.nz))
     initial_params = net.init(jrand.PRNGKey(setup.num_epochs), u_init)
     del u_init
     if setup.load_warm or setup.load_last:
