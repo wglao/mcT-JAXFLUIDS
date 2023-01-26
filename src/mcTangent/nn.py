@@ -58,7 +58,8 @@ class mcT_net_dense(hk.Module):
         self._create_net()
     
     def __call__(self, input):
-        return self.f(input)
+        out = net(jnp.ravel(input))
+        return jnp.reshape(out, (input.shape))
 
     def _create_net(self):
         sequence = []
@@ -68,13 +69,7 @@ class mcT_net_dense(hk.Module):
             else:
                 sequence += [hk.Linear(size)]
         sequence.append(hk.Linear(self.out_size))
-        net = hk.Sequential(sequence)
-
-        def f(x):
-            out = net(jnp.ravel(x))
-            return jnp.reshape(out, (x.shape))
-        
-        self.f = f
+        self.net = hk.Sequential(sequence)
 
 # TODO: CNN
 # class mcT_net_cnn(hk.Module):

@@ -104,7 +104,7 @@ numerical = json.load(f)
 f.close()
 
 numerical['conservatives']['time_integration']['fixed_timestep'] = 0.1*dt
-numerical['conservatives']['convective_fluxes']['riemann_solver'] = "HLLC"
+numerical['conservatives']['convective_fluxes']['convective_solver'] = "FLUX-SPLITTING"
 
 class Cases():
     """
@@ -132,16 +132,16 @@ def pos_coefs(seed: int, out_shape: Union[tuple,int]) -> jnp.ndarray:
     """
     key = jrand.PRNGKey(seed)
     if type(out_shape) == int:
-        return np.abs(jnp.sqrt(0.5)*jrand.normal(key,(out_shape,)) + jnp.sqrt(0.5)) + jnp.finfo(jnp.float32).eps #strictly positive
-    return jnp.abs(jnp.sqrt(0.5)*jrand.normal(key,out_shape) + jnp.sqrt(0.5)) + jnp.finfo(jnp.float32).eps #strictly positive
+        return jnp.abs(jnp.sqrt(0.5)*jrand.truncated_normal(key,-jnp.sqrt(0.5),jnp.sqrt(0.5),(out_shape,)) + 0.5) + jnp.finfo(jnp.float32).eps #strictly positive
+    return jnp.abs(jnp.sqrt(0.5)*jrand.truncated_normal(key,-jnp.sqrt(0.5),jnp.sqrt(0.5),out_shape) + 0.5) + jnp.finfo(jnp.float32).eps #strictly positive
 
 def get_cases() -> Cases:
     case_list = []
     for seed in seeds_to_gen:
         case_new = copy.deepcopy(case_base)
         coefs = pos_coefs(seed,3)
-        rho0 = f"lambda x: 1.0*(x <= {coefs[2]}) + {coefs[0]}*(x > {coefs[2]})",
-        p0 = f"lambda x: 1.0*(x <= {coefs[2]}) + {coefs[1]}*(x > {coefs[2]})",
+        rho0 = f"lambda x: 1.0*(x <= {coefs[2]}) + {coefs[0]}*(x > {coefs[2]})"
+        p0 = f"lambda x: 1.0*(x <= {coefs[2]}) + {coefs[1]}*(x > {coefs[2]})"
         case_new['initial_condition']['rho'] = rho0
         case_new['initial_condition']['p'] = p0
 
