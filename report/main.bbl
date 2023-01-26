@@ -1,0 +1,216 @@
+% $ biblatex auxiliary file $
+% $ biblatex bbl format version 3.2 $
+% Do not modify the above lines!
+%
+% This is an auxiliary file used by the 'biblatex' package.
+% This file may safely be deleted. It will be recreated by
+% biber as required.
+%
+\begingroup
+\makeatletter
+\@ifundefined{ver@biblatex.sty}
+  {\@latex@error
+     {Missing 'biblatex' package}
+     {The bibliography requires the 'biblatex' package.}
+      \aftergroup\endinput}
+  {}
+\endgroup
+
+
+\refsection{0}
+  \datalist[entry]{nty/global//global/global}
+    \entry{bezgin22}{article}{}
+      \name{author}{3}{}{%
+        {{hash=39dae92bc02c50bf6bd87080e5fea6f5}{%
+           family={Bezgin},
+           familyi={B\bibinitperiod},
+           given={Deniz\bibnamedelima A.},
+           giveni={D\bibinitperiod\bibinitdelim A\bibinitperiod}}}%
+        {{hash=25d98fc7f0c104ca912d20864a56d9da}{%
+           family={Buhendwa},
+           familyi={B\bibinitperiod},
+           given={Aaron\bibnamedelima B.},
+           giveni={A\bibinitperiod\bibinitdelim B\bibinitperiod}}}%
+        {{hash=54d047106356f745398344726a0428ec}{%
+           family={Adams},
+           familyi={A\bibinitperiod},
+           given={Nikolaus\bibnamedelima A.},
+           giveni={N\bibinitperiod\bibinitdelim A\bibinitperiod}}}%
+      }
+      \strng{namehash}{0123752c54df6af349aa0bc82e74b543}
+      \strng{fullhash}{0123752c54df6af349aa0bc82e74b543}
+      \strng{bibnamehash}{0123752c54df6af349aa0bc82e74b543}
+      \strng{authorbibnamehash}{0123752c54df6af349aa0bc82e74b543}
+      \strng{authornamehash}{0123752c54df6af349aa0bc82e74b543}
+      \strng{authorfullhash}{0123752c54df6af349aa0bc82e74b543}
+      \field{sortinit}{B}
+      \field{sortinithash}{d7095fff47cda75ca2589920aae98399}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{shorttitle}
+      \field{abstract}{Physical systems are governed by partial differential equations (PDEs). The Navier-Stokes equations describe fluid flows and are representative of nonlinear physical systems with complex spatio-temporal interactions. Fluid flows are omnipresent in nature and engineering applications, and their accurate simulation is essential for providing insights into these processes. While PDEs are typically solved with numerical methods, the recent success of machine learning (ML) has shown that ML methods can provide novel avenues of finding solutions to PDEs. ML is becoming more and more present in computational fluid dynamics (CFD). However, up to this date, there does not exist a general-purpose ML-CFD package which provides 1) powerful state-of-the-art numerical methods, 2) seamless hybridization of ML with CFD, and 3) automatic differentiation (AD) capabilities. AD in particular is essential to ML-CFD research as it provides gradient information and enables optimization of preexisting and novel CFD models. In this work, we propose JAX-FLUIDS: a comprehensive fully-differentiable CFD Python solver for compressible two-phase flows. JAX-FLUIDS allows the simulation of complex fluid dynamics with phenomena like three-dimensional turbulence, compressibility effects, and two-phase flows. Written entirely in JAX, it is straightforward to include existing ML models into the proposed framework. Furthermore, JAX-FLUIDS enables end-to-end optimization. I.e., ML models can be optimized with gradients that are backpropagated through the entire CFD algorithm, and therefore contain not only information of the underlying PDE but also of the applied numerical methods. We believe that a Python package like JAX-FLUIDS is crucial to facilitate research at the intersection of ML and CFD and may pave the way for an era of differentiable fluid dynamics.}
+      \field{annotation}{Comment: 53 pages, 23 figures}
+      \field{issn}{00104655}
+      \field{journaltitle}{Computer Physics Communications}
+      \field{month}{1}
+      \field{note}{arXiv:2203.13760 [physics]}
+      \field{shorttitle}{{JAX}-{FLUIDS}}
+      \field{title}{{JAX}-{FLUIDS}: {A} fully-differentiable high-order computational fluid dynamics solver for compressible two-phase flows}
+      \field{urlday}{2}
+      \field{urlmonth}{12}
+      \field{urlyear}{2022}
+      \field{volume}{282}
+      \field{year}{2023}
+      \field{urldateera}{ce}
+      \field{pages}{108527}
+      \range{pages}{1}
+      \verb{doi}
+      \verb 10.1016/j.cpc.2022.108527
+      \endverb
+      \verb{file}
+      \verb arXiv Fulltext PDF:/home/wglao/Zotero/storage/N726GEMB/Bezgin et al. - 2023 - JAX-FLUIDS A fully-differentiable high-order comp.pdf:application/pdf;arXiv.org Snapshot:/home/wglao/Zotero/storage/JXSHIV7P/2203.html:text/html
+      \endverb
+      \verb{urlraw}
+      \verb http://arxiv.org/abs/2203.13760
+      \endverb
+      \verb{url}
+      \verb http://arxiv.org/abs/2203.13760
+      \endverb
+      \keyw{Computer Science - Machine Learning,Physics - Fluid Dynamics}
+    \endentry
+    \entry{bui22}{misc}{}
+      \name{author}{1}{}{%
+        {{hash=99afe2d504448d834bb4cb66ffdfea48}{%
+           family={Bui-Thanh},
+           familyi={B\bibinithyphendelim T\bibinitperiod},
+           given={Tan},
+           giveni={T\bibinitperiod}}}%
+      }
+      \list{publisher}{1}{%
+        {arXiv}%
+      }
+      \strng{namehash}{99afe2d504448d834bb4cb66ffdfea48}
+      \strng{fullhash}{99afe2d504448d834bb4cb66ffdfea48}
+      \strng{bibnamehash}{99afe2d504448d834bb4cb66ffdfea48}
+      \strng{authorbibnamehash}{99afe2d504448d834bb4cb66ffdfea48}
+      \strng{authornamehash}{99afe2d504448d834bb4cb66ffdfea48}
+      \strng{authorfullhash}{99afe2d504448d834bb4cb66ffdfea48}
+      \field{sortinit}{B}
+      \field{sortinithash}{d7095fff47cda75ca2589920aae98399}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{abstract}{One of the reasons why many neural networks are capable of replicating complicated tasks or functions is their universal property. Though the past few decades have seen tremendous advances in theories of neural networks, a single constructive framework for neural network universality remains unavailable. This paper is an effort to provide a unified and constructive framework for the universality of a large class of activations including most of existing ones. At the heart of the framework is the concept of neural network approximate identity (nAI). The main result is: \{{\textbackslash}em any nAI activation function is universal\}. It turns out that most of existing activations are nAI, and thus universal in the space of continuous functions on compacta. The framework has the following main properties. First, it is constructive with elementary means from functional analysis, probability theory, and numerical analysis. Second, it is the first unified attempt that is valid for most of existing activations. Third, as a by product, the framework provides the first university proof for some of the existing activation functions including Mish, SiLU, ELU, GELU, and etc. Fourth, it provides new proofs for most activation functions. Fifth, it discovers new activations with guaranteed universality property. Sixth, for a given activation and error tolerance, the framework provides precisely the architecture of the corresponding one-hidden neural network with predetermined number of neurons, and the values of weights/biases. Seventh, the framework allows us to abstractly present the first universal approximation with favorable non-asymptotic rate.}
+      \field{annotation}{Comment: fix typos errors, remove results that are not necessary, and add section 9 on non-asymptotic results. Add figures to demonstrate the theoretical results}
+      \field{month}{1}
+      \field{note}{arXiv:2112.14877 [cs, math, stat]}
+      \field{title}{A {Unified} and {Constructive} {Framework} for the {Universality} of {Neural} {Networks}}
+      \field{urlday}{25}
+      \field{urlmonth}{1}
+      \field{urlyear}{2023}
+      \field{year}{2022}
+      \field{urldateera}{ce}
+      \verb{doi}
+      \verb 10.48550/arXiv.2112.14877
+      \endverb
+      \verb{file}
+      \verb arXiv Fulltext PDF:C\:\\Users\\wesle\\Zotero\\storage\\LE7J3YJF\\Bui-Thanh - 2022 - A Unified and Constructive Framework for the Unive.pdf:application/pdf;arXiv.org Snapshot:C\:\\Users\\wesle\\Zotero\\storage\\PJCLPXAZ\\2112.html:text/html
+      \endverb
+      \verb{urlraw}
+      \verb http://arxiv.org/abs/2112.14877
+      \endverb
+      \verb{url}
+      \verb http://arxiv.org/abs/2112.14877
+      \endverb
+      \keyw{Computer Science - Machine Learning,Mathematics - Numerical Analysis,Statistics - Machine Learning}
+    \endentry
+    \entry{haeffele17}{inproceedings}{}
+      \name{author}{2}{}{%
+        {{hash=ac6b7e99b7abf728145e35c849e6efba}{%
+           family={Haeffele},
+           familyi={H\bibinitperiod},
+           given={Benjamin\bibnamedelima D.},
+           giveni={B\bibinitperiod\bibinitdelim D\bibinitperiod}}}%
+        {{hash=cd9fcbcdec4e95c6d5ec403a6d9ea82d}{%
+           family={Vidal},
+           familyi={V\bibinitperiod},
+           given={René},
+           giveni={R\bibinitperiod}}}%
+      }
+      \strng{namehash}{7217944b33d4088f55dc7652dc38741e}
+      \strng{fullhash}{7217944b33d4088f55dc7652dc38741e}
+      \strng{bibnamehash}{7217944b33d4088f55dc7652dc38741e}
+      \strng{authorbibnamehash}{7217944b33d4088f55dc7652dc38741e}
+      \strng{authornamehash}{7217944b33d4088f55dc7652dc38741e}
+      \strng{authorfullhash}{7217944b33d4088f55dc7652dc38741e}
+      \field{sortinit}{H}
+      \field{sortinithash}{23a3aa7c24e56cfa16945d55545109b5}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{abstract}{The past few years have seen a dramatic increase in the performance of recognition systems thanks to the introduction of deep networks for representation learning. However, the mathematical reasons for this success remain elusive. A key issue is that the neural network training problem is nonconvex, hence optimization algorithms may not return a global minima. This paper provides sufficient conditions to guarantee that local minima are globally optimal and that a local descent strategy can reach a global minima from any initialization. Our conditions require both the network output and the regularization to be positively homogeneous functions of the network parameters, with the regularization being designed to control the network size. Our results apply to networks with one hidden layer, where size is measured by the number of neurons in the hidden layer, and multiple deep subnetworks connected in parallel, where size is measured by the number of subnetworks.}
+      \field{booktitle}{2017 {IEEE} {Conference} on {Computer} {Vision} and {Pattern} {Recognition} ({CVPR})}
+      \field{month}{7}
+      \field{note}{ISSN: 1063-6919}
+      \field{title}{Global {Optimality} in {Neural} {Network} {Training}}
+      \field{year}{2017}
+      \field{pages}{4390\bibrangedash 4398}
+      \range{pages}{9}
+      \verb{doi}
+      \verb 10.1109/CVPR.2017.467
+      \endverb
+      \verb{file}
+      \verb Haeffele and Vidal - 2017 - Global Optimality in Neural Network Training.pdf:C\:\\Users\\wesle\\Zotero\\storage\\T4RXE9AF\\Haeffele and Vidal - 2017 - Global Optimality in Neural Network Training.pdf:application/pdf;IEEE Xplore Abstract Record:C\:\\Users\\wesle\\Zotero\\storage\\5HJ76AKZ\\8099950.html:text/html
+      \endverb
+      \keyw{Algorithm design and analysis,Biological neural networks,Loss measurement,Minimization,Neurons,Optimization,Training}
+    \endentry
+    \entry{nguyen22}{article}{}
+      \name{author}{2}{}{%
+        {{hash=6f1d60a39968ec303e2973ed43d067b1}{%
+           family={Nguyen},
+           familyi={N\bibinitperiod},
+           given={Hai\bibnamedelima V.},
+           giveni={H\bibinitperiod\bibinitdelim V\bibinitperiod}}}%
+        {{hash=99afe2d504448d834bb4cb66ffdfea48}{%
+           family={Bui-Thanh},
+           familyi={B\bibinithyphendelim T\bibinitperiod},
+           given={Tan},
+           giveni={T\bibinitperiod}}}%
+      }
+      \list{publisher}{1}{%
+        {arXiv}%
+      }
+      \strng{namehash}{ec35679dbff8e072beb012d8afe0c7f7}
+      \strng{fullhash}{ec35679dbff8e072beb012d8afe0c7f7}
+      \strng{bibnamehash}{ec35679dbff8e072beb012d8afe0c7f7}
+      \strng{authorbibnamehash}{ec35679dbff8e072beb012d8afe0c7f7}
+      \strng{authornamehash}{ec35679dbff8e072beb012d8afe0c7f7}
+      \strng{authorfullhash}{ec35679dbff8e072beb012d8afe0c7f7}
+      \field{sortinit}{N}
+      \field{sortinithash}{22369a73d5f88983a108b63f07f37084}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{abstract}{Real-time accurate solutions of large-scale complex dynamical systems are in critical need for control, optimization, uncertainty quantification, and decision-making in practical engineering and science applications, especially digital twin applications. This paper contributes in this direction a model-constrained tangent slope learning (mcTangent) approach. At the heart of mcTangent is the synergy of several desirable strategies: i) a tangent slope learning to take advantage of the neural network speed and the time-accurate nature of the method of lines; ii) a model-constrained approach to encode the neural network tangent slope with the underlying governing equations; iii) sequential learning strategies to promote long-time stability and accuracy; and iv) data randomization approach to implicitly enforce the smoothness of the neural network tangent slope and its likeliness to the truth tangent slope up second order derivatives in order to further enhance the stability and accuracy of mcTangent solutions. Rigorous results are provided to analyze and justify the proposed approach. Several numerical results for the transport equation, viscous Burgers equation, and Navier-Stokes equation are presented to study and demonstrate the robustness and long-time accuracy of the proposed mcTangent learning approach.}
+      \field{month}{11}
+      \field{note}{arXiv:2208.04995 [physics, stat]}
+      \field{title}{A {Model}-{Constrained} {Tangent} {Slope} {Learning} {Approach} for {Dynamical} {Systems}}
+      \field{urlday}{11}
+      \field{urlmonth}{1}
+      \field{urlyear}{2023}
+      \field{year}{2022}
+      \field{urldateera}{ce}
+      \verb{doi}
+      \verb 10.48550/arXiv.2208.04995
+      \endverb
+      \verb{file}
+      \verb arXiv Fulltext PDF:C\:\\Users\\wesle\\Zotero\\storage\\RRL3DYYE\\Nguyen and Bui-Thanh - 2022 - A Model-Constrained Tangent Slope Learning Approac.pdf:application/pdf;arXiv.org Snapshot:C\:\\Users\\wesle\\Zotero\\storage\\Z3S4QB5F\\2208.html:text/html
+      \endverb
+      \verb{urlraw}
+      \verb http://arxiv.org/abs/2208.04995
+      \endverb
+      \verb{url}
+      \verb http://arxiv.org/abs/2208.04995
+      \endverb
+      \keyw{Computer Science - Machine Learning,Statistics - Machine Learning,Physics - Fluid Dynamics,Mathematics - Dynamical Systems}
+    \endentry
+  \enddatalist
+\endrefsection
+\endinput
+
