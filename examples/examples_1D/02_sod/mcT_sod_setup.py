@@ -68,7 +68,7 @@ noise_level = 0.02 if noise_flag else 0
 ns = 1
 nr = 1
 
-num_epochs = int(300)
+num_epochs = int(3e3)
 learning_rate = 1e-3
 batch_size = 1
 layers = 1
