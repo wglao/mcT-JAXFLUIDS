@@ -395,17 +395,14 @@ class SimulationManager:
 
         # LOOP STAGES
         for stage in range( self.time_integrator.no_stages ):
-            if self.input_reader.numerical_setup['conservatives']['convective_fluxes']['riemann_solver'] == "MCTANGENT":
+            if self.input_reader.numerical_setup['mcTangent'] == "true":
                 # NN FORWARD PASS
                 # with primes
                 params = ml_parameters_dict['MCTANGENT']
                 net = ml_networks_dict['MCTANGENT']
                 primes_real = primes[:,4:104]
-                tangent = jnp.zeros_like(primes_real)
-                tangent = tangent.at[0].set(jnp.reshape(net.apply(params,primes_real[0]),tangent[0].shape))
+                tangent = net.apply(params,primes_real)
                 primes = self.time_integrator.integrate(primes,tangent,timestep_size,stage)
-                primes = primes.at[1::3,4:104].set(1)
-                primes = primes.at[2:4,4:104].set(0)
                 cons = get_conservatives_from_primitives(primes,self.material_manager)
                 
                 residual_interface = None

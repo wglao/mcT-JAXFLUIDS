@@ -184,7 +184,7 @@ def mse(pred: jnp.ndarray, true: Optional[jnp.ndarray] = None) -> float:
 #     return tangent_i
 # net = hk.without_apply_rng(hk.transform(mcT_fn))
 
-net = hk.without_apply_rng(mct.nn.create('dense',layers,hidden_size,activation,nx))
+net = hk.without_apply_rng(mct.nn.create('dense',layers,hidden_size,activation,5*nx))
 # optimizer = optax.adam(learning_rate)
 # optimizer = mct.nn.eve()
 optimizer = optax.eve()

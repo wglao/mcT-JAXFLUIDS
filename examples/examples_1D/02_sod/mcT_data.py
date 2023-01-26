@@ -16,7 +16,7 @@ class Sim(NamedTuple):
     case: dict
     numerical: dict
 
-    def load(self, quantities: Iterable[str] = ['density','velocityX','velocityY','velocityZ','pressure'], dtype: Union[str, type] = 'ARRAY'):
+    def load(self, quantities: Iterable[str] = ['density','velocityX','pressure','temperature'], dtype: Union[str, type] = 'ARRAY'):
         out = load_data(self.domain,quantities)
         if isinstance(dtype,type):
             dtype = 'DICT' if dtype == dict else 'ARRAY'
@@ -99,7 +99,7 @@ class Data():
         # for ii in range(setup.num_train):
         #     data_train[ii,...] = self._load(self.next_sim())
         
-        data_test = np.zeros((setup.num_test,5,int(setup.nt*setup.test_ratio)+1,setup.nx_fine,setup.ny_fine,setup.nz_fine))
+        data_test = np.zeros((setup.num_test,4,int(setup.nt*setup.test_ratio)+1,setup.nx_fine,setup.ny_fine,setup.nz_fine))
         for ii in range(setup.num_test):
             data_test[ii,...] = self._load(self.next_sim())
         data_train = data_test[:,:,:setup.nt+1,...]  # delete later, for one sample only
