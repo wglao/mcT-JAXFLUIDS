@@ -40,9 +40,9 @@ class RungeKutta3(TimeIntegrator):
     def __init__(self, nh: int, inactive_axis: List) -> None:
         super(RungeKutta3, self).__init__(nh, inactive_axis)
         self.no_stages = 3
-        self.timestep_multiplier = (1.0, 0.25, 2.0/3.0) 
-        self.timestep_increment_factor = (1.0, 0.5, 1.0) 
-        self.conservatives_multiplier = [ (0.25, 0.75), (2.0/3.0, 1.0/3.0) ]
+        self.timestep_multiplier = jnp.array([1.0, 0.25, 2.0/3.0]) 
+        self.timestep_increment_factor = jnp.array([1.0, 0.5, 1.0])
+        self.conservatives_multiplier = jnp.array([[0.25, 0.75],[2.0/3.0, 1.0/3.0]])
 
     def prepare_buffer_for_integration(self, cons: jnp.DeviceArray, init: jnp.DeviceArray, stage: int) -> jnp.DeviceArray:
         ''' stage 1: u_cons = 3/4 u^n + 1/4 u^*

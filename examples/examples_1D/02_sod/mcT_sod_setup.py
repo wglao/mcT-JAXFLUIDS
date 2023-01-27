@@ -19,9 +19,9 @@ import mcTangent as mct
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 # os.environ["XLA_FLAGS"] = "--xla_dump_to=/tmp/foo"
-config.update("jax_debug_nans", False)
+config.update("jax_debug_nans", True)
 config.update("jax_disable_jit", False)
-config.update("jax_enable_x64", True)
+config.update("jax_enable_x64", False)
 
 """parameters for initializing mcTangent"""
 os.environ["PROJ"] = '/home/wglao/Documents/PHO-ICES/mcT-JAXFLUIDS/examples/examples_1D/02_sod'
@@ -30,16 +30,14 @@ save_path = proj('data')
 parallel_flag = False
 
 # data only = False, False
-mc_flag = False
-noise_flag = False
+mc_flag = True
+noise_flag = True
 
 # use warm params
 load_warm = False
 load_last = False
 # keep track of epochs if interrupted
-last_epoch = 21 if load_last else 0
-
-small_batch = True
+last_epoch = 12 if load_last else 0
 
 vis_flag = False
 
@@ -61,23 +59,23 @@ nx_fine = 4*nx
 ny_fine = ny
 nz_fine = nz
 cfl = u*dt/dx
-integrator = "RK3"
+integrator = "Euler"
 
 mc_alpha = 1e5 if mc_flag else 0
 noise_level = 0.02 if noise_flag else 0
 ns = 1
-nr = 1
+nr = 1 if mc_flag else 0
 
-num_epochs = int(3e3)
+num_epochs = int(3e4)
 learning_rate = 1e-3
-batch_size = 1
+batch_size = 10
 layers = 1
-hidden_size = (5*nx)**2
+hidden_size = 5*nx
 activation = "relu"
 
 # sample set size
-num_train = 1
-num_test = 1
+num_train = 10
+num_test = 10
 test_ratio = 2
 
 # define batch by number of sequences trained on, instead of samples
@@ -105,6 +103,7 @@ f.close()
 
 numerical['conservatives']['time_integration']['fixed_timestep'] = 0.1*dt
 numerical['conservatives']['convective_fluxes']['convective_solver'] = "FLUX-SPLITTING"
+numerical['mcTangent'] = 'false'
 
 class Cases():
     """
@@ -172,22 +171,9 @@ def mse(pred: jnp.ndarray, true: Optional[jnp.ndarray] = None) -> float:
         return _mse(pred)
     return _mse(pred - true)
 
-# dense network, layer count variable not yet implemented
-# def mcT_fn(u_i: jnp.ndarray) -> jnp.ndarray:
-#     """Dense network with 1 layer of ReLU units"""
-#     mcT = hk.Sequential([
-#         hk.Linear(nx + 1), jax.nn.relu,
-#         # hk.Linear(32), jax.nn.relu,  # try second layer
-#         hk.Linear(nx + 1)
-#     ])
-#     tangent_i = mcT(jnp.ravel(u_i))
-#     return tangent_i
-# net = hk.without_apply_rng(hk.transform(mcT_fn))
-
 net = hk.without_apply_rng(mct.nn.create('dense',layers,hidden_size,activation,5*nx))
-# optimizer = optax.adam(learning_rate)
-# optimizer = mct.nn.eve()
 optimizer = optax.eve()
+# optimizer = optax.adam(learning_rate)
 
 def save_params(params: hk.Params, path: str, filename: Optional[str] = None) -> None:
     # params = jax.device_get(params)

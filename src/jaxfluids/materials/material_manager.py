@@ -36,6 +36,7 @@ import jax.numpy as jnp
 from jaxfluids.unit_handler import UnitHandler
 from jaxfluids.materials.material import Material
 from jaxfluids.materials import DICT_MATERIAL
+import sys
 
 class MaterialManager():
     """The MaterialManager class is a wrapper class that holds the materials. The main purpose of this class is to enable

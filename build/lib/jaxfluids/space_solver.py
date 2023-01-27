@@ -1,35 +1,33 @@
-"""
-*------------------------------------------------------------------------------*
-* JAX-FLUIDS -                                                                 *
-*                                                                              *
-* A fully-differentiable CFD solver for compressible two-phase flows.          *
-* Copyright (C) 2022  Deniz A. Bezgin, Aaron B. Buhendwa, Nikolaus A. Adams    *
-*                                                                              *
-* This program is free software: you can redistribute it and/or modify         *
-* it under the terms of the GNU General Public License as published by         *
-* the Free Software Foundation, either version 3 of the License, or            *
-* (at your option) any later version.                                          *
-*                                                                              *
-* This program is distributed in the hope that it will be useful,              *
-* but WITHOUT ANY WARRANTY; without even the implied warranty of               *
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the                *
-* GNU General Public License for more details.                                 *
-*                                                                              *
-* You should have received a copy of the GNU General Public License            *
-* along with this program.  If not, see <https://www.gnu.org/licenses/>.       *
-*                                                                              *
-*------------------------------------------------------------------------------*
-*                                                                              *
-* CONTACT                                                                      *
-*                                                                              *
-* deniz.bezgin@tum.de // aaron.buhendwa@tum.de // nikolaus.adams@tum.de        *
-*                                                                              *
-*------------------------------------------------------------------------------*
-*                                                                              *
-* Munich, April 15th, 2022                                                     *
-*                                                                              *
-*------------------------------------------------------------------------------*
-"""
+#*------------------------------------------------------------------------------*
+#* JAX-FLUIDS -                                                                 *
+#*                                                                              *
+#* A fully-differentiable CFD solver for compressible two-phase flows.          *
+#* Copyright (C) 2022  Deniz A. Bezgin, Aaron B. Buhendwa, Nikolaus A. Adams    *
+#*                                                                              *
+#* This program is free software: you can redistribute it and/or modify         *
+#* it under the terms of the GNU General Public License as published by         *
+#* the Free Software Foundation, either version 3 of the License, or            *
+#* (at your option) any later version.                                          *
+#*                                                                              *
+#* This program is distributed in the hope that it will be useful,              *
+#* but WITHOUT ANY WARRANTY; without even the implied warranty of               *
+#* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the                *
+#* GNU General Public License for more details.                                 *
+#*                                                                              *
+#* You should have received a copy of the GNU General Public License            *
+#* along with this program.  If not, see <https://www.gnu.org/licenses/>.       *
+#*                                                                              *
+#*------------------------------------------------------------------------------*
+#*                                                                              *
+#* CONTACT                                                                      *
+#*                                                                              *
+#* deniz.bezgin@tum.de // aaron.buhendwa@tum.de // nikolaus.adams@tum.de        *
+#*                                                                              *
+#*------------------------------------------------------------------------------*
+#*                                                                              *
+#* Munich, April 15th, 2022                                                     *
+#*                                                                              *
+#*------------------------------------------------------------------------------*
 
 from typing import Dict, List, Union, Tuple
 
@@ -151,16 +149,16 @@ class SpaceSolver:
             # CONVECTIVE CONTRIBUTION
             if self.is_convective_flux:
                 flux_xi += self.flux_computer.compute_convective_flux_xi(primes, cons, axis, ml_parameters_dict, ml_networks_dict)
-            
-            # VISCOUS CONTRIBUTION
+                
+            # # VISCOUS CONTRIBUTION
             if self.is_viscous_flux:
                 flux_xi -= self.source_term_solver.compute_viscous_flux_xi(primes[1:4], temperature, axis)
 
-            # HEAT CONTRIBUTION
+            # # HEAT CONTRIBUTION
             if self.is_heat_flux:
                 flux_xi += self.source_term_solver.compute_heat_flux_xi(temperature, axis)
 
-            # WEIGHT FLUXES
+            # # WEIGHT FLUXES
             if self.levelset_type != None:
                 flux_xi = self.levelset_handler.weight_cell_face_flux_xi(flux_xi, apertures[axis])
 

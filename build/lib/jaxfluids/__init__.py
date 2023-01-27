@@ -54,6 +54,7 @@ turb
 from jaxfluids.initializer import Initializer
 from jaxfluids.input_reader import InputReader
 from jaxfluids.simulation_manager import SimulationManager
+from jaxfluids.simulation_manager_copy import SimulationManagerCopy
 
 __version__ = "0.1.0"
 __author__ = "Deniz Bezgin, Aaron Buhendwa"
@@ -63,4 +64,5 @@ __all__ = (
     "Initializer", 
     "InputReader"
     "SimulationManager", 
+    "SimulationManagerCopy", 
 )

@@ -36,6 +36,7 @@ from typing import Dict, Union, Tuple
 import numpy as np
 import jax.numpy as jnp
 import json
+import jax
 
 from jaxfluids.solvers.riemann_solvers import DICT_RIEMANN_SOLVER, DICT_SIGNAL_SPEEDS
 from jaxfluids.stencils import DICT_DERIVATIVE_REINITIALIZATION, DICT_DERIVATIVE_LEVELSET_ADVECTION, DICT_SPATIAL_RECONSTRUCTION, DICT_DERIVATIVE_QUANTITY_EXTENDER, DICT_DERIVATIVE_FACE, DICT_FIRST_DERIVATIVE_CENTER, DICT_CENTRAL_RECONSTRUCTION
@@ -48,7 +49,7 @@ class InputReader:
     and numerical setup can be provided as either a path to a json file or 
     as a preloaded dictionary.
     """
-
+    
     def __init__(self, case_setup: Union[str, Dict], numerical_setup: Union[str, Dict]) -> None:
 
         # READ CASE SETUP AND NUMERICAL_SETUP 

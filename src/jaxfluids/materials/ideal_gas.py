@@ -33,7 +33,7 @@ from typing import List, Union
 import types
 
 import jax.numpy as jnp
-
+import sys
 from jaxfluids.materials.material import Material
 from jaxfluids.unit_handler import UnitHandler
 
@@ -73,7 +73,9 @@ class IdealGas(Material):
     def get_energy(self, p:jnp.DeviceArray, rho:jnp.DeviceArray) -> jnp.DeviceArray:
         """See base class. """
         # Specific internal energy
-        return p / ( rho * (self.gamma - 1) )
+        denom = rho * (self.gamma - 1)
+        denom = jnp.where(denom==0,denom+sys.float_info.epsilon,denom)
+        return p / denom
 
     def get_total_energy(self, p:jnp.DeviceArray, rho:jnp.DeviceArray, u:jnp.DeviceArray, v:jnp.DeviceArray, w:jnp.DeviceArray) -> jnp.DeviceArray:
         """See base class. """

@@ -61,7 +61,7 @@ from jaxfluids.utilities import get_primitives_from_conservatives, get_conservat
 from jaxfluids.unit_handler import UnitHandler
 from jaxfluids.turb.turb_stats_manager import TurbStatsManager
 
-class SimulationManager:
+class SimulationManagerMCT:
     """ The SimulationManager is the top-level class in JAX-FLUIDS. It
     provides functionality to perform conventional CFD simulations
     as well as end-to-end optimization of ML models.
@@ -334,7 +334,7 @@ class SimulationManager:
         # LOG SIMULATION FINISH
         self.logger.log_sim_finish(time.time() - start_loop)
 
-    @partial(jax.jit, static_argnums=(0, 8, 11))
+    # @partial(jax.jit, static_argnums=(0, 8, 11))
     def do_integration_step(self, cons: jnp.DeviceArray, primes: jnp.DeviceArray, timestep_size: float, current_time: float,
         levelset: Union[jnp.DeviceArray, None] = None, volume_fraction: Union[jnp.DeviceArray, None] = None, apertures: Union[List, None] = None,
         reinitialize: bool = False, forcings_dictionary: Union[Dict, None] = None, 
@@ -387,76 +387,73 @@ class SimulationManager:
         residual_reinit = None if self.input_reader.levelset_type != "FLUID-FLUID" else 0.0
         
         # INIT BUFFER FOR RUNGE KUTTA SCHEME
-        if self.time_integrator.no_stages > 1:
-            init_cons       = self.levelset_handler.transform_to_conservatives(cons, volume_fraction) if self.input_reader.levelset_type != None else jnp.array(cons, copy=True)
-            init_levelset   = jnp.array(levelset, copy=True) if self.input_reader.levelset_type in ["FLUID-FLUID", "FLUID-SOLID-DYNAMIC"] else None
+        # if self.time_integrator.no_stages > 1:
+        #     init_cons       = self.levelset_handler.transform_to_conservatives(cons, volume_fraction) if self.input_reader.levelset_type != None else jnp.array(cons, copy=True)
+        #     init_levelset   = jnp.array(levelset, copy=True) if self.input_reader.levelset_type in ["FLUID-FLUID", "FLUID-SOLID-DYNAMIC"] else None
 
         current_time_stage = current_time
 
         # LOOP STAGES
-        for stage in range( self.time_integrator.no_stages ):
-            if self.input_reader.numerical_setup['mcTangent'] == "true":
-                # NN FORWARD PASS
-                # with primes
-                params = ml_parameters_dict['MCTANGENT']
-                net = ml_networks_dict['MCTANGENT']
-                primes_real = primes[:,4:104]
-                tangent = net.apply(params,primes_real)
-                primes = self.time_integrator.integrate(primes,tangent,timestep_size,stage)
-                cons = get_conservatives_from_primitives(primes,self.material_manager)
-                
-                residual_interface = None
-            else:
-                # RIGHT HAND SIDE
-                rhs_cons, rhs_levelset, residual_interface = self.space_solver.compute_rhs(
-                    cons, primes, current_time_stage, 
-                    levelset, volume_fraction, apertures, 
-                    forcings_dictionary, 
-                    ml_parameters_dict, ml_networks_dict)
+        # @jax.jit
+        def _mcT_true(params,net,cons,primes,current_time_stage,stage):
+            """mcTangent Forward Pass"""
+            params = params['MCTANGENT']
+            net = net['MCTANGENT']
+            primes_real = primes[:,4:104]
+            tangent = net.apply(params,primes_real)
+            primes = self.time_integrator.integrate(primes,tangent,timestep_size,stage)
+            # make realistic
+            cons = get_conservatives_from_primitives(primes,self.material_manager)
+            return primes, cons
+        mcT_true = partial(_mcT_true,ml_parameters_dict,ml_networks_dict)
 
-                # TRANSFORM TO CONSERVATIVES
-                if self.input_reader.levelset_type != None:
-                    cons = self.levelset_handler.transform_to_conservatives(cons, volume_fraction)
+        # @jax.jit
+        def _mcT_false(levelset,volume_fraction,apertures,forcings_dictionary,ml_parameters_dict,ml_networks_dict,cons,primes,current_time_stage,stage):
+            """default jax fluids solver"""
+            rhs_cons, rhs_levelset, residual_interface = self.space_solver.compute_rhs(
+                cons, primes, current_time_stage, 
+                levelset, volume_fraction, apertures, 
+                forcings_dictionary, 
+                ml_parameters_dict, ml_networks_dict)
 
-                # PREPARE BUFFER FOR RUNGE KUTTA INTEGRATION
-                if stage > 0:
-                    cons = self.time_integrator.prepare_buffer_for_integration(cons, init_cons, stage)
-                    if self.input_reader.levelset_type in ["FLUID-FLUID", "FLUID-SOLID-DYNAMIC"]:
-                        levelset = self.time_integrator.prepare_buffer_for_integration(levelset, init_levelset, stage)
-
-                # INTEGRATE
-                cons = self.time_integrator.integrate(cons, rhs_cons, timestep_size, stage)
-                if self.input_reader.levelset_type in ["FLUID-FLUID", "FLUID-SOLID-DYNAMIC"]:
-                    levelset_new = self.time_integrator.integrate(levelset, rhs_levelset, timestep_size, stage)
-                    
-                    # REINITIALIZE
-                    if self.input_reader.levelset_type == "FLUID-FLUID" and stage == self.time_integrator.no_stages - 1 and reinitialize:
-                        levelset_new, residual_reinit   = self.levelset_handler.reinitialize(levelset_new, False)
-                    else:
-                        residual_reinit = 0.0
-
-                    # LEVELSET BOUNDARIES AND INTERFACE RECONSTRUCTION
-                    levelset_new                        = self.boundary_condition.fill_boundary_levelset(levelset_new)
-                    volume_fraction_new, apertures_new  = self.levelset_handler.compute_volume_fraction_and_apertures(levelset_new)
-                
-                elif self.input_reader.levelset_type == "FLUID-SOLID-STATIC":
-                    levelset_new, volume_fraction_new, apertures_new = levelset, volume_fraction, apertures
-
-                # MIXING AND PRIME EXTENSION
-                if self.input_reader.levelset_type != None:
-                    cons, mask_small_cells = self.levelset_handler.mixing(cons, levelset_new, volume_fraction_new, volume_fraction)
-                    cons    = self.levelset_handler.transform_to_volume_averages(cons, volume_fraction_new)
-                    primes  = self.levelset_handler.compute_primitives_from_conservatives_in_real_fluid(cons, primes, levelset_new, volume_fraction_new, mask_small_cells)
-                    cons, primes, residual_primes           = self.levelset_handler.extend_primes(cons, primes, levelset_new, volume_fraction_new, current_time_stage, mask_small_cells)
-                    levelset, volume_fraction, apertures    = levelset_new, volume_fraction_new, apertures_new
-                else:
-                    primes = get_primitives_from_conservatives(cons, self.material_manager)
+            # INTEGRATE
+            cons = self.time_integrator.integrate(cons, rhs_cons, timestep_size, stage)
             
-            current_time_stage = current_time + timestep_size*self.time_integrator.timestep_increment_factor[stage]
+            # MIXING AND PRIME EXTENSION
+            primes = get_primitives_from_conservatives(cons, self.material_manager)
+            return primes, cons
+        mcT_false = partial(_mcT_false,levelset,volume_fraction,apertures,forcings_dictionary,ml_parameters_dict,ml_networks_dict)
 
-            # FILL BOUNDARIES
+        # @jax.jit
+        def integrate_scan(carry, x):
+            current_time_stage = current_time + timestep_size*self.time_integrator.timestep_increment_factor[x]
+            primes, cons = jax.lax.cond(
+                self.numerical_setup['mcTangent']=='true',
+                mcT_true, mcT_false,
+                *carry, current_time_stage, x
+            )
             cons, primes = self.boundary_condition.fill_boundary_primes(cons, primes, current_time_stage)
+            return (cons,primes), None
 
+        (cons,primes), _ = jax.lax.scan(
+            integrate_scan,
+            (cons,primes),
+            jnp.arange(self.time_integrator.no_stages),
+            unroll=self.time_integrator.no_stages
+        )
+
+        # for stage in range( self.time_integrator.no_stages ):
+        #     current_time_stage = current_time + timestep_size*self.time_integrator.timestep_increment_factor[stage]
+        #     primes, cons = jax.lax.cond(
+        #         self.numerical_setup['mcTangent']=='true',
+        #         mcT_true, mcT_false,
+        #         cons,primes,current_time_stage,stage
+        #     )
+                        
+        #     # FILL BOUNDARIES
+        #     cons, primes = self.boundary_condition.fill_boundary_primes(cons, primes, current_time_stage)
+
+        residual_interface = None
         # CREATE DICTIONARIES
         material_fields     = {"cons": cons, "primes": primes}
         levelset_quantities = {"levelset": levelset, "volume_fraction": volume_fraction, "apertures": apertures}
@@ -542,9 +539,10 @@ class SimulationManager:
 
     #     return carry, ys
 
-    # @partial(jax.jit, static_argnums=(0, 8))
-    def _feed_forward(self, primes_init: jnp.DeviceArray, levelset_init: jnp.DeviceArray, n_steps: int, timestep_size: float, 
-        t_start: float, output_freq: int = 1, ml_parameters_dict: Union[Dict, None] = None,
+    # @partial(jax.jit, static_argnums=(0,4))
+    def _feed_forward(self, primes_init: jnp.DeviceArray, levelset_init: jnp.DeviceArray,
+        n_steps= 2,
+        ml_parameters_dict: Union[Dict, None] = None,
         ml_networks_dict: Union[Dict, None] = None) -> Tuple[jnp.DeviceArray, jnp.DeviceArray]:
         """Advances the initial buffers in time for a fixed amount of steps and returns the
         entire trajectory. This function is differentiable and
@@ -569,6 +567,9 @@ class SimulationManager:
         :return: _description_
         :rtype: Tuple[jnp.DeviceArray, jnp.DeviceArray]
         """
+        timestep_size = 0.002
+        output_freq = 1
+        t_start=0.
         # CREATE BUFFER
         nh               = self.domain_information.nh_conservatives
         nx, ny, nz       = self.domain_information.number_of_cells
@@ -622,7 +623,7 @@ class SimulationManager:
         current_step = 0
 
         # LOOP OVER STEPS
-        for step in range(n_steps):
+        for step in jnp.arange(n_steps):
             if self.input_reader.levelset_type != None:
                 reinitialize = True if current_step % self.levelset_handler.interval_reinitialization == 0 else False
             else:
@@ -662,9 +663,10 @@ class SimulationManager:
         # return solution_array, times_array
         return solution_list, times_list
 
-    # @partial(jax.jit, static_argnums=(0, 8))
-    def feed_forward(self, batch_primes_init: jnp.DeviceArray, batch_levelset_init: jnp.DeviceArray, n_steps: int, timestep_size: float, 
-        t_start: float, output_freq: int = 1, ml_parameters_dict: Union[Dict, None] = None, 
+    # @partial(jax.jit, static_argnums=(0, 4))
+    def feed_forward(self, batch_primes_init: jnp.DeviceArray, batch_levelset_init: jnp.DeviceArray,
+        n_steps: int,
+        ml_parameters_dict: Union[Dict, None] = None, 
         ml_networks_dict: Union[Dict, None] = None) -> Tuple[jnp.DeviceArray, jnp.DeviceArray]:
         """Vectorized version of the _feed_forward() method.
 
@@ -687,5 +689,5 @@ class SimulationManager:
         :return: _description_
         :rtype: Tuple[jnp.DeviceArray, jnp.DeviceArray]
         """
-        return jax.vmap(self._feed_forward, in_axes=(0,0,None,None,None,None,None,None), out_axes=(0,0,))(
-            batch_primes_init, batch_levelset_init, n_steps, timestep_size, t_start, output_freq, ml_parameters_dict, ml_networks_dict)
+        return jax.vmap(self._feed_forward, in_axes=(0,0,None,None,None), out_axes=(0,0,))(
+            batch_primes_init, batch_levelset_init, n_steps, ml_parameters_dict, ml_networks_dict)

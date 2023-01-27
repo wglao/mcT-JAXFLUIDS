@@ -19,12 +19,12 @@ from jax import value_and_grad, vmap, jit, lax, pmap
 import pickle
 import haiku as hk
 import optax
-from jaxfluids import InputReader, Initializer, SimulationManager, SimulationManagerCopy
+from jaxfluids import InputReader, Initializer, SimulationManager
 from jaxfluids.post_process import load_data
 
-import mcT_adv_setup as setup
-import mcT_adv_data as dat
-from mcT_adv_data import Sim
+import mcTangent.mcT_setup as setup
+import mcTangent.mcT_data as dat
+from mcTangent.mcT_data import Sim
 
 """
 Train mcTangent to solve linear advection using JAX-Fluids
@@ -54,8 +54,7 @@ class TrainingState(NamedTuple):
     opt_state: Iterable[optax.OptState]
     loss: float
 
-from mcT_adv_setup import save_params, load_params, compare_params, mse, net, optimizer
-
+from mcTangent.mcT_setup import save_params, load_params, compare_params, mse, net, optimizer, mse
 
 @jit
 def get_coarse(data_fine: jnp.ndarray) -> jnp.ndarray:
@@ -144,7 +143,7 @@ def get_loss_batch(params: hk.Params, batch:jnp.ndarray, sim: dat.Sim, seed: int
     coarse_case['domain']['x']['cells'] = setup.nx
     coarse_num['conservatives']['time_integration']['fixed_timestep'] = setup.dt
     coarse_num['conservatives']['time_integration']['time_integrator'] = setup.integrator
-    coarse_num['mcTangent'] = 'true'
+    coarse_num['conservatives']['convective_fluxes']['riemann_solver'] = "MCTANGENT"
 
     ml_parameters_dict = {"MCTANGENT":params}
     ml_networks_dict = hk.data_structures.to_immutable_dict({"MCTANGENT": net})
@@ -161,8 +160,6 @@ def get_loss_batch(params: hk.Params, batch:jnp.ndarray, sim: dat.Sim, seed: int
 
 
     # feed_forward_batch = vmap(sim_manager.feed_forward, in_axes=(0,None,None,None,None,None,None,None), out_axes=(0,0))
-    t0 = time.time()
-
     ml_pred_arr, _ = sim_manager.feed_forward(
         ml_primes_init,
         None, # not needed for single-phase, but is a required arg for feed_forward
@@ -172,27 +169,8 @@ def get_loss_batch(params: hk.Params, batch:jnp.ndarray, sim: dat.Sim, seed: int
         ml_parameters_dict,
         ml_networks_dict
     )
-    t1 = time.time()
     ml_pred_arr = jnp.array(ml_pred_arr[1:])
     ml_pred_arr = jnp.moveaxis(ml_pred_arr,0,2)
-
-    sim_manager = SimulationManagerCopy(input_reader)
-    t2 = time.time()
-    ml_pred_arr, _ = sim_manager.feed_forward(
-        ml_primes_init,
-        None, # not needed for single-phase, but is a required arg for feed_forward
-        setup.ns+1,
-        coarse_case['general']['save_dt'],
-        0.0, 1,
-        ml_parameters_dict,
-        ml_networks_dict
-    )
-    t3 = time.time()
-    print(t1-t0, t3-t2)
-    ml_pred_arr = jnp.array(ml_pred_arr[1:])
-    ml_pred_arr = jnp.moveaxis(ml_pred_arr,0,2)
-
-
 
     # ml loss with density only
     ml_loss_sample = mse(ml_pred_arr[:,0,...], sample[:,0,1:,...])
@@ -451,7 +429,7 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
     min_err = sys.float_info.max
     epoch_min = -1
     best_state = state
-    err_hist_df = pd.DataFrame({'Time': jnp.linspace(setup.dt,int(setup.t_max*setup.test_ratio),int(setup.nt*setup.test_ratio))})
+    err_hist_dict = {'Time': jnp.linspace(setup.dt,int(setup.t_max*setup.test_ratio),int(setup.nt*setup.test_ratio))}
     for epoch in range(setup.last_epoch,setup.num_epochs):
         # reset each epoch
         state = TrainingState(state.params,state.opt_state,0)
@@ -495,13 +473,13 @@ def Train(state: TrainingState, data_test: np.ndarray, data_train: np.ndarray) -
 
         
         dat.data.check_sims()
-        err_hist_df = pd.concat((err_hist_df,pd.DataFrame({f"MCT_err_ep{epoch}_{setup.ns}s{setup.nr}r": err_hist})),axis=1)
+        err_hist_dict[f"MCT_err_ep{epoch}_{setup.ns}s{setup.nr}r"] =  err_hist
         if epoch == setup.last_epoch:
-            err_hist_df = pd.concat((err_hist_df,pd.DataFrame({"HLLC_err": merr_hist})),axis=1)
+            err_hist_dict[f"HLLC_err"] =  merr_hist
         else:
             del merr_hist
         # pd.concat(axis=1)
-        err_hist_table = wandb.Table(data=err_hist_df)
+        err_hist_table = wandb.Table(data=pd.concat(err_hist_dict,axis=1))
         weight_arr = jax.device_get(state.params['mc_t_net_dense/~_create_net/linear']['w'])
         weight_im = wandb.Image(weight_arr,caption='Linear Density Weights')
         wandb.log({
@@ -681,5 +659,3 @@ if __name__ == "__main__":
     # # %% visualize best and end state
     if setup.vis_flag:
         visualize()
-
-

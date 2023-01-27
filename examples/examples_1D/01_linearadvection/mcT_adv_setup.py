@@ -29,7 +29,7 @@ save_path = proj('data')
 parallel_flag = False
 
 # data only = False, False
-mc_flag = True
+mc_flag = False
 noise_flag = True
 
 # use warm params
@@ -188,7 +188,7 @@ def mse(pred: jnp.ndarray, true: Optional[jnp.ndarray] = None) -> float:
 #     return tangent_i
 # net = hk.without_apply_rng(hk.transform(mcT_fn))
 
-net = hk.without_apply_rng(nn.create('dense',layers,hidden_size,activation,nx))
+net = hk.without_apply_rng(nn.create('dense',layers,hidden_size,activation,5*nx))
 # optimizer = optax.adam(learning_rate)
 optimizer = optax.eve()
 

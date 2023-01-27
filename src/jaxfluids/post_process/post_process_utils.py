@@ -162,7 +162,7 @@ def load_data(path: str, quantities: List, start: int = 0, end: int = None,
 
     # FILL BUFFERS
     for i, file in enumerate(files):
-        print("Loading time snapshot %.4e" % times[i])
+        # print("Loading time snapshot %.4e" % times[i])
         with h5py.File(os.path.join(path, file), "r") as h5file:
 
             for quant in quantities:
