@@ -136,11 +136,13 @@ case_dict['domain']['x']['cells'] = setup.nx
 numerical['conservatives']['time_integration']['fixed_timestep'] = setup.dt
 numerical['conservatives']['time_integration']['time_integrator'] = setup.integrator
 
-input_reader = InputReader(setup.case_base, setup.numerical)
+numerical['mcTangent'] = 'true'
+input_reader = InputReader(case_dict, numerical.copy())
 sim_manager_mct = SimulationManagerMCT(input_reader)
 
-input_reader = InputReader(setup.case_base, setup.numerical)
-sim_manager_def = SimulationManager(input_reader)
+numerical['mcTangent'] = 'false'
+input_reader = InputReader(case_dict, numerical.copy())
+sim_manager_def = SimulationManagerMCT(input_reader)
 
 
 @jit
@@ -219,12 +221,12 @@ def get_loss_batch(params: hk.Params, batch: jnp.ndarray) -> float:
 
     ml_pred_arr = jnp.array(ml_pred_arr[1:])
     ml_pred_arr = jnp.moveaxis(ml_pred_arr, 0, 2)
-    ml_loss_sample = mse(
+    ml_loss_batch = mse(
         ml_pred_arr[:, [0, 1, 4], :setup.ns+1], sample[:, 0:3, 1:])
 
-    # return ml_loss_sample
+    # return ml_loss_batch
     if not setup.mc_flag or setup.nr < 1:
-        return ml_loss_sample
+        return ml_loss_batch
 
     # mc loss
 
@@ -248,26 +250,17 @@ def get_loss_batch(params: hk.Params, batch: jnp.ndarray) -> float:
         mc_primes_init,
         None,  # not needed for single-phase, but is a required arg for feed_forward
         setup.nr,
-        setup.dt,
-        0., 1
+        ml_parameters_dict,
+        ml_networks_dict
     )
     mc_pred_arr = jnp.array(mc_pred_arr[1:])
     mc_pred_arr = jnp.moveaxis(mc_pred_arr, 0, 1)
 
     # mc loss with rho only
-    mc_loss_sample = setup.mc_alpha/setup.nr * mse(ml_rseqs, mc_pred_arr)
-    loss_sample = ml_loss_sample + mc_loss_sample
+    mc_loss_batch = setup.mc_alpha/setup.nr * mse(ml_rseqs, mc_pred_arr)
+    loss_batch = ml_loss_batch + mc_loss_batch
 
-    return loss_sample
-
-
-def update_body(params, opt_state, batch):
-    loss, grads = value_and_grad(get_loss_batch, argnums=0)(params, batch)
-    opt_state.hyperparams['f'] = loss
-    updates, opt_state = optimizer.update(grads, opt_state)
-    params = optax.apply_updates(params, updates)
-
-    return loss, params, opt_state
+    return loss_batch
 
 
 def update_scan(carry, x):
@@ -275,12 +268,26 @@ def update_scan(carry, x):
     batch = lax.dynamic_slice_in_dim(
         data, x*setup.batch_size, setup.batch_size)
     batch = jnp.swapaxes(batch, 1, 2)
-    loss, params, opt_state = update_body(params, opt_state, batch)
+    loss, grads = value_and_grad(get_loss_batch, argnums=0)(params, batch)
+    opt_state.hyperparams['f'] = loss
+    updates, opt_state = optimizer.update(grads, opt_state)
+    params = optax.apply_updates(params, updates)
 
     return (params, opt_state, data), loss
 
+def update_for(i, args):
+    params, opt_state, data, loss = args
+    batch = lax.dynamic_slice_in_dim(
+        data, i*setup.batch_size, setup.batch_size)
+    batch = jnp.swapaxes(batch, 1, 2)
+    loss_new, grads = value_and_grad(get_loss_batch, argnums=0)(params, batch)
+    opt_state.hyperparams['f'] = loss_new
+    updates, opt_state = optimizer.update(grads, opt_state)
+    params = optax.apply_updates(params, updates)
+    return params, opt_state, data, loss + loss_new/setup.num_batches
 
-@jit
+
+# @jit
 def update(params: Iterable[hk.Params], opt_state: Iterable[optax.OptState], data: jnp.ndarray) -> Tuple:
     """
     Evaluates network loss and gradients
@@ -297,8 +304,8 @@ def update(params: Iterable[hk.Params], opt_state: Iterable[optax.OptState], dat
     (params, opt_state, data), loss_arr = lax.scan(
         update_scan,
         (params, opt_state, data),
-        jnp.arange(setup.num_batches),
-        unroll=setup.num_batches)
+        jnp.arange(setup.num_batches)
+    )
 
     return params, opt_state, jnp.mean(loss_arr)
 
@@ -538,7 +545,7 @@ def visualize():
 if __name__ == "__main__":
     # data input will be primes(t)
     u_init = jnp.zeros((5, setup.nx, setup.ny, setup.nz))
-    initial_params = net.init(jrand.PRNGKey(1), u_init)
+    initial_params = net.init(jrand.PRNGKey(2), u_init)
     del u_init
     if setup.load_warm or setup.load_last:
         # loads warm params, always uses last.pkl over warm.pkl if available and toggled on
@@ -554,6 +561,9 @@ if __name__ == "__main__":
             del warm_params
         else:
             print("\n"+"-"*5+"No Loadable Params"+"-"*5+"\n")
+    else:
+        print("\n"+"-"*5+"Fresh Params"+"-"*5+"\n")
+
 
     initial_opt_state = jit(optimizer.init)(initial_params)
     data_train, data_test = dat.data.load_all()

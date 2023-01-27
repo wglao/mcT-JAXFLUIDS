@@ -34,7 +34,7 @@ parallel_flag = False
 
 # data only = False, False
 mc_flag = True
-noise_flag = True
+noise_flag = False
 
 # use warm params
 load_warm = False
@@ -73,17 +73,21 @@ nr = 1 if mc_flag else 0
 num_train = 1
 num_test = 1
 test_ratio = 2
+batch_size = 10
+batch_size = min(batch_size, num_train)
+num_batches = int(np.ceil(num_train/batch_size))
 
 num_epochs = int(3e4)
 learning_rate = 1e-3
-batch_size = 10
-batch_size = min(batch_size, num_train)
 layers = 1
 hidden_size = 5*nx
 activation = "relu"
 
-# define batch by number of sequences trained on, instead of samples
-num_batches = int(np.ceil(num_train/batch_size))
+net = hk.without_apply_rng(mct.nn.create(
+    'dense', layers, hidden_size, activation, 5*nx))
+optimizer = optax.eve()
+# optimizer = optax.adam(learning_rate)
+
 
 # edit case setup
 f = open(case_name+'.json', 'r')
@@ -184,12 +188,6 @@ def mse(pred: jnp.ndarray, true: Optional[jnp.ndarray] = None) -> float:
     if true is None:
         return _mse(pred)
     return _mse(pred - true)
-
-
-net = hk.without_apply_rng(mct.nn.create(
-    'dense', layers, hidden_size, activation, 5*nx))
-optimizer = optax.eve()
-# optimizer = optax.adam(learning_rate)
 
 
 def save_params(params: hk.Params, path: str, filename: Optional[str] = None) -> None:
