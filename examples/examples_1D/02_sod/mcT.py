@@ -275,6 +275,7 @@ def update_scan(carry, x):
 
     return (params, opt_state, data), loss
 
+
 def update_for(i, args):
     params, opt_state, data, loss = args
     batch = lax.dynamic_slice_in_dim(
@@ -366,7 +367,7 @@ def Train(params, opt_state, data_test: np.ndarray, data_train: np.ndarray) -> h
             save_params(params, best_param_path)
 
         # Log progress
-        if epoch % 100 == 0:   
+        if epoch % 100 == 0:
             if os.path.exists(last_param_path):
                 os.remove(last_param_path)
             save_params(params, last_param_path)
@@ -564,7 +565,6 @@ if __name__ == "__main__":
             print("\n"+"-"*5+"No Loadable Params"+"-"*5+"\n")
     else:
         print("\n"+"-"*5+"Fresh Params"+"-"*5+"\n")
-
 
     initial_opt_state = jit(optimizer.init)(initial_params)
     data_train, data_test = dat.data.load_all()
