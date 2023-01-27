@@ -346,8 +346,6 @@ def Train(params, opt_state, data_test: np.ndarray, data_train: np.ndarray) -> h
         err, err_hist, ml_f = evaluate(params, test_coarse)
         t2 = time.time()
 
-        import pdb; pdb.set_trace()
-
         print("Update time: {:.2e}".format(t1-t0),
               "Eval time: {:.2e}".format(t2-t1))
         print("Loss: {:.2e}".format(loss))
