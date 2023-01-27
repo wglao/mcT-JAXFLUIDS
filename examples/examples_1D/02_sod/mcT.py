@@ -355,7 +355,8 @@ def Train(params, opt_state, data_test: np.ndarray, data_train: np.ndarray) -> h
 
         print("Update time: {:.2e}".format(t1-t0),
               "Eval time: {:.2e}".format(t2-t1))
-        print("Loss: {:.2e}".format(loss))
+        print("Loss: {:.2e}".format(loss),
+              "Err: {:2e}".format(err))
 
         if err <= min_err:
             min_err = err
