@@ -71,22 +71,19 @@ ns = 1
 nr = 1 if mc_flag else 0
 
 # sample set size
-num_train = 10
-num_test = 10
+num_train = 1
+num_test = 1
 test_ratio = 2
 batch_size = 3
 batch_size = min(batch_size, num_train) if num_train > 0 else batch_size
 num_batches = int(np.ceil(num_train/batch_size))
 
 num_epochs = int(3e4)
-learning_rate = 1e-3
+learning_rate = 1e-4
 layers = 1
 ksize = 5
 hidden_size = 5*nx
 activation = "relu"
-
-# net = hk.without_apply_rng(mct.nn.create(
-#     'dense', layers, hidden_size, activation, 5*nx))
 
 # CNN
 class mcT_net(hk.Module):
@@ -117,9 +114,9 @@ def net_fn(u):
 #   net = mcT_net(ksize)
   return net(u)
 
-# net = hk.without_apply_rng(hk.transform(net_fn))
-net = hk.without_apply_rng(mct.nn.create(
-    'dense', layers, hidden_size, activation, 5*nx))
+net = hk.without_apply_rng(hk.transform(net_fn))
+# net = hk.without_apply_rng(mct.nn.create(
+#     'dense', layers, hidden_size, activation, 5*nx))
 # optimizer = optax.eve()
 optimizer = optax.adam(learning_rate)
 
