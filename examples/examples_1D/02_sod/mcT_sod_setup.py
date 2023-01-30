@@ -35,7 +35,7 @@ parallel_flag = False
 
 # data only = False, False
 mc_flag = True
-noise_flag = False
+noise_flag = True
 
 # use warm params
 load_warm = False
@@ -71,8 +71,8 @@ ns = 1
 nr = 1 if mc_flag else 0
 
 # sample set size
-num_train = 1
-num_test = 1
+num_train = 10
+num_test = 10
 test_ratio = 2
 batch_size = 10
 batch_size = min(batch_size, num_train)
@@ -117,9 +117,11 @@ def net_fn(u):
 #   net = mcT_net(ksize)
   return net(u)
 
-net = hk.without_apply_rng(hk.transform(net_fn))
-optimizer = optax.eve()
-# optimizer = optax.adam(learning_rate)
+# net = hk.without_apply_rng(hk.transform(net_fn))
+net = hk.without_apply_rng(mct.nn.create(
+    'dense', layers, hidden_size, activation, 5*nx))
+# optimizer = optax.eve()
+optimizer = optax.adam(learning_rate)
 
 
 # edit case setup

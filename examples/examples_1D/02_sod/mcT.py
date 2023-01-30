@@ -156,8 +156,8 @@ def evaluate(params: hk.Params, data: jnp.ndarray) -> float:
     ----- returns -----\n
     :return err_epoch: mean squared error for the epoch
     :return err_hist: mean squared error for every time step of the predicted trajectories
-    :return merr_epoch: mean squared error between model trajectory and truth
-    :return merr_hist: mean squared error of governing model for every time step
+    :return ml_t: ml solution at end of train length
+    :return ml_f: ml solution at end of test length
     """
     ml_parameters_dict = {"MCTANGENT": params}
     ml_networks_dict = hk.data_structures.to_immutable_dict({"MCTANGENT": net})
@@ -181,7 +181,7 @@ def evaluate(params: hk.Params, data: jnp.ndarray) -> float:
         ml_pred_arr[:, [0, 1, 4], ...], data[:, 0:3, 1:, ...]))
     err = jnp.mean(err_hist)
 
-    return err, jnp.mean(err_hist, axis=0), ml_pred_arr[0, [0, 1, 4], -1]
+    return err, jnp.mean(err_hist, axis=0), ml_pred_arr[0, [0, 1, 4], setup.nt],  ml_pred_arr[0, [0, 1, 4], -1]
 
 
 # @jit
@@ -269,7 +269,7 @@ def update_scan(carry, x):
         data, x*setup.batch_size, setup.batch_size)
     batch = jnp.swapaxes(batch, 1, 2)
     loss, grads = value_and_grad(get_loss_batch, argnums=0)(params, batch)
-    opt_state.hyperparams['f'] = loss
+    # opt_state.hyperparams['f'] = loss
     updates, opt_state = optimizer.update(grads, opt_state)
     params = optax.apply_updates(params, updates)
 
@@ -351,7 +351,7 @@ def Train(params, opt_state, data_test: np.ndarray, data_train: np.ndarray) -> h
         t0 = time.time()
         params, opt_state, loss = update(params, opt_state, train_seq)
         t1 = time.time()
-        err, err_hist, ml_f = evaluate(params, test_coarse)
+        err, err_hist, ml_t, ml_f = evaluate(params, test_coarse)
         t2 = time.time()
 
         print("Update time: {:.2e}".format(t1-t0),
@@ -381,9 +381,12 @@ def Train(params, opt_state, data_test: np.ndarray, data_train: np.ndarray) -> h
             )
             state_f_df = pd.concat((
                 state_f_df, pd.DataFrame({
-                    f"MCT0_rho{epoch}": jax.device_get(jnp.ravel(ml_f[0])),
-                    f"MCT0_u{epoch}": jax.device_get(jnp.ravel(ml_f[1])),
-                    f"MCT0_p{epoch}": jax.device_get(jnp.ravel(ml_f[2])),
+                    f"MCT_f_rho{epoch}": jax.device_get(jnp.ravel(ml_f[0])),
+                    f"MCT_f_u{epoch}": jax.device_get(jnp.ravel(ml_f[1])),
+                    f"MCT_f_p{epoch}": jax.device_get(jnp.ravel(ml_f[2])),
+                    f"MCT_t_rho{epoch}": jax.device_get(jnp.ravel(ml_t[0])),
+                    f"MCT_t_u{epoch}": jax.device_get(jnp.ravel(ml_t[1])),
+                    f"MCT_t_p{epoch}": jax.device_get(jnp.ravel(ml_t[2])),
                 })),
                 axis=1
             )
@@ -542,8 +545,8 @@ def visualize():
 # %% main
 if __name__ == "__main__":
     # data input will be primes(t)
-    u_init = jnp.zeros((5, setup.nx+4, 1))
-    initial_params = net.init(jrand.PRNGKey(2), u_init)
+    u_init = jnp.zeros((5, setup.nx, 1, 1))
+    initial_params = net.init(jrand.PRNGKey(1), u_init)
     del u_init
     if setup.load_warm or setup.load_last:
         # loads warm params, always uses last.pkl over warm.pkl if available and toggled on
