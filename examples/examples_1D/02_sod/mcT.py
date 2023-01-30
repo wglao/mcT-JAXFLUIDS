@@ -288,7 +288,7 @@ def update_for(i, args):
     return params, opt_state, data, loss + loss_new/setup.num_batches
 
 
-# @jit
+@jit
 def update(params: Iterable[hk.Params], opt_state: Iterable[optax.OptState], data: jnp.ndarray) -> Tuple:
     """
     Evaluates network loss and gradients

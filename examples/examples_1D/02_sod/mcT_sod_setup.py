@@ -74,8 +74,8 @@ nr = 1 if mc_flag else 0
 num_train = 10
 num_test = 10
 test_ratio = 2
-batch_size = 10
-batch_size = min(batch_size, num_train)
+batch_size = 3
+batch_size = min(batch_size, num_train) if num_train > 0 else batch_size
 num_batches = int(np.ceil(num_train/batch_size))
 
 num_epochs = int(3e4)
