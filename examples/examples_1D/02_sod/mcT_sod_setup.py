@@ -29,6 +29,7 @@ config.update("jax_enable_x64", False)
 """parameters for initializing mcTangent"""
 os.environ["PROJ"] = '/home/wglao/Documents/PHO-ICES/mcT-JAXFLUIDS/examples/examples_1D/02_sod'
 proj = functools.partial(os.path.join, os.environ["PROJ"])
+src = functools.partial(os.path.join, os.environ["PROJ"])
 save_path = proj('data')
 parallel_flag = False
 
@@ -80,17 +81,49 @@ num_batches = int(np.ceil(num_train/batch_size))
 num_epochs = int(3e4)
 learning_rate = 1e-3
 layers = 1
+ksize = 5
 hidden_size = 5*nx
 activation = "relu"
 
-net = hk.without_apply_rng(mct.nn.create(
-    'dense', layers, hidden_size, activation, 5*nx))
+# net = hk.without_apply_rng(mct.nn.create(
+#     'dense', layers, hidden_size, activation, 5*nx))
+
+# CNN
+class mcT_net(hk.Module):
+    def __init__(self,kernel_size: int=5):
+        super(mcT_net,self).__init__()
+        self.ksize = kernel_size
+
+    def __call__(self, input:jnp.ndarray) -> jnp.ndarray:
+        forward = hk.Sequential([
+            hk.Conv1D(1,self.ksize,padding="VALID"),
+        ])
+        out = forward(input)
+        return out
+
+class mcT_2D(hk.Module):
+    def __init__(self):
+        super(mcT_2D,self).__init__()
+        
+    def __call__(self, input:jnp.ndarray) -> jnp.ndarray:
+        forward = hk.Sequential([
+            hk.Conv2D(5,5,padding="VALID"),
+        ])
+        out = forward(input)
+        return out
+
+def net_fn(u):
+  net = mcT_2D()
+#   net = mcT_net(ksize)
+  return net(u)
+
+net = hk.without_apply_rng(hk.transform(net_fn))
 optimizer = optax.eve()
 # optimizer = optax.adam(learning_rate)
 
 
 # edit case setup
-f = open(case_name+'.json', 'r')
+f = open(src(case_name+'.json'), 'r')
 case_base = json.load(f)
 f.close()
 
@@ -105,7 +138,7 @@ seeds_to_gen = np.arange(num_test+num_train+1)
 # case_arr = np.empty(len(seeds_to_gen), dtype=object)
 
 # edit numerical setup
-f = open('numerical_setup.json', 'r')
+f = open(src('numerical_setup.json'), 'r')
 numerical = json.load(f)
 f.close()
 

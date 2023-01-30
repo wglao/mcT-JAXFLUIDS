@@ -372,7 +372,7 @@ def Train(params, opt_state, data_test: np.ndarray, data_train: np.ndarray) -> h
                 os.remove(last_param_path)
             save_params(params, last_param_path)
             print("time {:.2e}s loss {:.2e} err {:.2e}  min_err {:.2e} EPmin {:d} EP {:d} ".format(
-                t2 - t1, loss, float(err), float(min_err), epoch_min, epoch))
+                t2 - t0, loss, float(err), float(min_err), epoch_min, epoch))
             err_hist_df = pd.concat((
                 err_hist_df, pd.DataFrame({
                     f"MCT_err_ep{epoch}_{setup.ns}s{setup.nr}r":  jax.device_get(err_hist)
@@ -387,20 +387,16 @@ def Train(params, opt_state, data_test: np.ndarray, data_train: np.ndarray) -> h
                 })),
                 axis=1
             )
-            weight_arr = jax.device_get(
-                params['mc_t_net_dense/~_create_net/linear']['w']
-            )
-            weight_arr1 = jax.device_get(
-                params['mc_t_net_dense/~_create_net/linear_1']['w']
-            )
+            # weight_arr = jax.device_get(
+            #     params['mc_t_2_d/conv2_d']['w']
+            # )
             wandb.log({
                 "Train loss": float(loss),
                 "Test Error": float(err),
                 "Epoch": float(epoch),
                 "Error History Table": wandb.Table(data=err_hist_df),
                 "Final State Table": wandb.Table(data=state_f_df),
-                "Weight Matrix": wandb.Image(weight_arr, caption='In-Hid Weights'),
-                "Weight Matrix1": wandb.Image(weight_arr1, caption='Hid-Out Weights')
+                # "Weight Matrix": wandb.Image(weight_arr, caption='Kernel Weights'),
             })
 
         # if epoch % 50 == 0:  # Clear every x epochs
@@ -546,7 +542,7 @@ def visualize():
 # %% main
 if __name__ == "__main__":
     # data input will be primes(t)
-    u_init = jnp.zeros((5, setup.nx, setup.ny, setup.nz))
+    u_init = jnp.zeros((5, setup.nx+4, 1))
     initial_params = net.init(jrand.PRNGKey(2), u_init)
     del u_init
     if setup.load_warm or setup.load_last:

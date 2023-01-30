@@ -424,7 +424,10 @@ class SimulationManagerMCT:
             params = params['MCTANGENT']
             net = net['MCTANGENT']
             primes_real = primes[:, 4:104]
-            tangent = net.apply(params, primes_real)
+            primes_in = jnp.pad(jnp.reshape(
+                primes_real, (5, 100, 1)), ((0, 0), (2, 2), (0, 0)), mode="wrap")
+            tangent = net.apply(params, primes_in)
+            tangent = jnp.reshape(tangent, primes_real.shape)
             primes = self.time_integrator.integrate(
                 primes, tangent, timestep_size, stage)
             # make realistic
