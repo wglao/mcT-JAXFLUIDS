@@ -302,13 +302,29 @@ def update(params: Iterable[hk.Params], opt_state: Iterable[optax.OptState], dat
     ----- returns -----\n
     :return state: tuple of arrays containing updated params, optimizer state, and loss
     """
-    (params, opt_state, data), loss_arr = lax.scan(
-        update_scan,
-        (params, opt_state, data),
-        jnp.arange(setup.num_batches)
-    )
+    # jitted lax scan, full unroll
+    # (params, opt_state, data), loss_arr = lax.scan(
+    #     update_scan,
+    #     (params, opt_state, data),
+    #     jnp.arange(setup.num_batches)
+    # )
 
-    return params, opt_state, jnp.mean(loss_arr)
+    # jitted while loop
+    i = 0
+    loss = 0
+    while i < setup.num_batches:
+        batch = lax.dynamic_slice_in_dim(
+        data, i*setup.batch_size, setup.batch_size)
+        batch = jnp.swapaxes(batch, 1, 2)
+        loss_new, grads = value_and_grad(get_loss_batch, argnums=0)(params, batch)
+        # opt_state.hyperparams['f'] = loss_new
+        updates, opt_state = optimizer.update(grads, opt_state)
+        params = optax.apply_updates(params, updates)
+        loss += loss_new
+        i += 1
+
+    # return params, opt_state, jnp.mean(loss_arr)
+    return params, opt_state, loss
 
 
 def Train(params, opt_state, data_test: np.ndarray, data_train: np.ndarray) -> hk.Params:
