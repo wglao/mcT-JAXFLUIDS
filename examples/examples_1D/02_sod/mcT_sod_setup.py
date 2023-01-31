@@ -73,12 +73,12 @@ nr = 1 if mc_flag else 0
 # sample set size
 num_train = 1
 num_test = 1
-test_ratio = 2
+test_ratio = 1
 batch_size = 3
 batch_size = min(batch_size, num_train) if num_train > 0 else batch_size
 num_batches = int(np.ceil(num_train/batch_size))
 
-num_epochs = int(3e4)
+num_epochs = int(1e5)
 learning_rate = 1e-4
 layers = 1
 ksize = 5
@@ -103,10 +103,17 @@ class mcT_2D(hk.Module):
         super(mcT_2D,self).__init__()
         
     def __call__(self, input:jnp.ndarray) -> jnp.ndarray:
-        forward = hk.Sequential([
-            hk.Conv2D(5,5,padding="VALID"),
-        ])
-        out = forward(input)
+        # forward = hk.Sequential([
+        #     hk.Conv2D(32,(5,2),padding="VALID"),
+        #     jax.nn.relu,
+        #     hk.Conv2D(5,(32,2),padding="VALID")
+        # ])
+        out = hk.Conv2D(32,(5,2),padding="VALID")(input)
+        out = jnp.swapaxes(out, -1, 0)
+        out = jax.nn.relu(out)
+        out = hk.Conv2D(5,(32,2),padding="VALID")(out)
+        out = jnp.swapaxes(out, -1, 0)
+
         return out
 
 def net_fn(u):
@@ -117,8 +124,8 @@ def net_fn(u):
 net = hk.without_apply_rng(hk.transform(net_fn))
 # net = hk.without_apply_rng(mct.nn.create(
 #     'dense', layers, hidden_size, activation, 5*nx))
-# optimizer = optax.eve()
-optimizer = optax.adam(learning_rate)
+optimizer = optax.eve()
+# optimizer = optax.adam(learning_rate)
 
 
 # edit case setup

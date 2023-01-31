@@ -425,7 +425,7 @@ class SimulationManagerMCT:
             net = net['MCTANGENT']
             primes_real = primes[:, 4:104]
             primes_in = jnp.pad(jnp.reshape(
-                primes_real, (5, 100, 1)), ((0, 0), (2, 2), (0, 0)), mode="wrap")
+                primes_real, (5, 100, 1)), ((0, 0), (1, 1), (0, 0)), mode="edge")
             tangent = net.apply(params, primes_in)
             tangent = jnp.reshape(tangent, primes_real.shape)
             primes = self.time_integrator.integrate(

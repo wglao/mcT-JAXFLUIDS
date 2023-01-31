@@ -177,11 +177,14 @@ def evaluate(params: hk.Params, data: jnp.ndarray) -> float:
     ml_pred_arr = jnp.array(ml_pred_arr[1:])
     ml_pred_arr = jnp.moveaxis(ml_pred_arr, 0, 2)
 
-    err_hist = jnp.array(vmap(vmap(mse, in_axes=(1, 1)), in_axes=(0, 0))(
+    err_hist = jnp.array(vmap(mse, in_axes=(2, 2))(
         ml_pred_arr[:, [0, 1, 4], ...], data[:, 0:3, 1:, ...]))
-    err = jnp.mean(err_hist)
-
-    return err, jnp.mean(err_hist, axis=0), ml_pred_arr[0, [0, 1, 4], setup.nt],  ml_pred_arr[0, [0, 1, 4], -1]
+    # err = mse(ml_pred_arr[:, [0, 1, 4], ...], data[:, 0:3, 1:, ...])
+    err = jnp.cumsum(err_hist)[[100, 150, 200]]
+    ml_t = jnp.reshape(ml_pred_arr[0, [0, 1, 4], 100], (3, 100))
+    ml_t1 = jnp.reshape(ml_pred_arr[0, [0, 1, 4], 150], (3, 100))
+    ml_f = jnp.reshape(ml_pred_arr[0, [0, 1, 4], 200], (3, 100))
+    return err, err_hist, ml_t, ml_t1,  ml_f
 
 
 # @jit
@@ -269,7 +272,7 @@ def update_scan(carry, x):
         data, x*setup.batch_size, setup.batch_size)
     batch = jnp.swapaxes(batch, 1, 2)
     loss, grads = value_and_grad(get_loss_batch, argnums=0)(params, batch)
-    # opt_state.hyperparams['f'] = loss
+    opt_state.hyperparams['f'] = loss
     updates, opt_state = optimizer.update(grads, opt_state)
     params = optax.apply_updates(params, updates)
 
@@ -303,28 +306,46 @@ def update(params: Iterable[hk.Params], opt_state: Iterable[optax.OptState], dat
     :return state: tuple of arrays containing updated params, optimizer state, and loss
     """
     # jitted lax scan, full unroll
-    # (params, opt_state, data), loss_arr = lax.scan(
-    #     update_scan,
-    #     (params, opt_state, data),
-    #     jnp.arange(setup.num_batches)
-    # )
+    (params, opt_state, data), loss_arr = lax.scan(
+        update_scan,
+        (params, opt_state, data),
+        jnp.arange(setup.num_batches)
+    )
 
     # jitted while loop
-    i = 0
-    loss = 0
-    while i < setup.num_batches:
-        batch = lax.dynamic_slice_in_dim(
-        data, i*setup.batch_size, setup.batch_size)
-        batch = jnp.swapaxes(batch, 1, 2)
-        loss_new, grads = value_and_grad(get_loss_batch, argnums=0)(params, batch)
-        # opt_state.hyperparams['f'] = loss_new
-        updates, opt_state = optimizer.update(grads, opt_state)
-        params = optax.apply_updates(params, updates)
-        loss += loss_new
-        i += 1
+    # i = 0
+    # loss = 0
+    # while i < setup.num_batches:
+    #     batch = lax.dynamic_slice_in_dim(
+    #     data, i*setup.batch_size, setup.batch_size)
+    #     batch = jnp.swapaxes(batch, 1, 2)
+    #     loss_new, grads = value_and_grad(get_loss_batch, argnums=0)(params, batch)
+    #     # opt_state.hyperparams['f'] = loss_new
+    #     updates, opt_state = optimizer.update(grads, opt_state)
+    #     params = optax.apply_updates(params, updates)
+    #     loss += loss_new
+    #     i += 1
 
     # return params, opt_state, jnp.mean(loss_arr)
-    return params, opt_state, loss
+    return params, opt_state, jnp.mean(loss_arr)
+
+
+def mldb_scan(carry, x):
+    params, data = carry
+    batch = lax.dynamic_slice_in_dim(
+        data, x*setup.batch_size, setup.batch_size)
+    batch = jnp.swapaxes(batch, 1, 2)
+    loss = get_loss_batch(params, batch)
+
+    return (params, data), loss
+
+
+@jit
+def mldb_err(params, data):
+    (params, data), loss_arr = lax.scan(
+        mldb_scan, (params, data), jnp.arange(setup.num_batches), unroll=setup.num_batches
+    )
+    return jnp.mean(loss_arr)
 
 
 def Train(params, opt_state, data_test: np.ndarray, data_train: np.ndarray) -> hk.Params:
@@ -350,72 +371,72 @@ def Train(params, opt_state, data_test: np.ndarray, data_train: np.ndarray) -> h
     train_seq = jnp.moveaxis(train_seq, 0, 2)
     del train_coarse
 
-    err_hist_df = pd.DataFrame({
-        "Time": jnp.linspace(setup.dt, setup.t_max*setup.test_ratio, setup.nt*setup.test_ratio)
-    })
-    state_f_df = pd.DataFrame({
-        "X": jnp.linspace(0, setup.x_max, setup.nx),
-        "True0_rho": jax.device_get(jnp.ravel(test_coarse[0, 0, -1])),
-        "True0_u": jax.device_get(jnp.ravel(test_coarse[0, 1, -1])),
-        "True0_p": jax.device_get(jnp.ravel(test_coarse[0, 2, -1]))
-    })
+    test_times = jnp.array([100, 150, 200])
+    times = jnp.linspace(setup.dt, setup.t_max *
+                         setup.test_ratio, setup.nt*setup.test_ratio)
+    xs = jnp.linspace(0, setup.x_max, setup.nx)
 
-    min_err = sys.float_info.max
-    epoch_min = -1
+    true_t = jnp.reshape(test_coarse[0, 0:3, 100], (3, 100))
+    true_t1 = jnp.reshape(test_coarse[0, 0:3, 150], (3, 100))
+    true_f = jnp.reshape(test_coarse[0, 0:3, 200], (3, 100))
+
+    min_err = sys.float_info.max*jnp.ones(3)
+    epoch_min = -1*jnp.ones(3)
 
     for epoch in range(setup.num_epochs):
         t0 = time.time()
         params, opt_state, loss = update(params, opt_state, train_seq)
         t1 = time.time()
-        err, err_hist, ml_t, ml_f = evaluate(params, test_coarse)
+        err_arr, err_hist, ml_t, ml_t1, ml_f = evaluate(params, test_coarse)
+        # err = mldb_err(params,train_seq)
         t2 = time.time()
 
-        print("Update time: {:.2e}".format(t1-t0),
-              "Eval time: {:.2e}".format(t2-t1))
-        print("Loss: {:.2e}".format(loss),
-              "Err: {:2e}".format(err))
+        # print("Update time: {:.2e}".format(t1-t0),
+        #       "Eval time: {:.2e}".format(t2-t1))
+        # print("Loss: {:.2e}".format(loss),
+        #       "Err: {:.2e}".format(err))
 
-        if err <= min_err:
-            min_err = err
-            epoch_min = epoch
-            if os.path.exists(best_param_path):
-                os.remove(best_param_path)
-            save_params(params, best_param_path)
+        for i in range(3):
+            if err_arr[i] <= min_err[i]:
+                min_err[i] = err_arr[i]
+                epoch_min[i] = epoch
+                path = os.path.join(
+                    param_path, 'best_t{}.pkl'.format(test_times[i]))
+                if os.path.exists(path):
+                    os.remove(path)
+                save_params(params, path)
 
         # Log progress
         if epoch % 100 == 0:
-            if os.path.exists(last_param_path):
-                os.remove(last_param_path)
-            save_params(params, last_param_path)
-            print("time {:.2e}s loss {:.2e} err {:.2e}  min_err {:.2e} EPmin {:d} EP {:d} ".format(
-                t2 - t0, loss, float(err), float(min_err), epoch_min, epoch))
-            err_hist_df = pd.concat((
-                err_hist_df, pd.DataFrame({
-                    f"MCT_err_ep{epoch}_{setup.ns}s{setup.nr}r":  jax.device_get(err_hist)
-                })),
-                axis=1
-            )
-            state_f_df = pd.concat((
-                state_f_df, pd.DataFrame({
-                    f"MCT_f_rho{epoch}": jax.device_get(jnp.ravel(ml_f[0])),
-                    f"MCT_f_u{epoch}": jax.device_get(jnp.ravel(ml_f[1])),
-                    f"MCT_f_p{epoch}": jax.device_get(jnp.ravel(ml_f[2])),
-                    f"MCT_t_rho{epoch}": jax.device_get(jnp.ravel(ml_t[0])),
-                    f"MCT_t_u{epoch}": jax.device_get(jnp.ravel(ml_t[1])),
-                    f"MCT_t_p{epoch}": jax.device_get(jnp.ravel(ml_t[2])),
-                })),
-                axis=1
-            )
-            # weight_arr = jax.device_get(
-            #     params['mc_t_2_d/conv2_d']['w']
-            # )
+
+            errfig = plt.figure()
+            plt.plot(times, err_hist)
+
+            statefig_t = plt.figure()
+            plt.plot(xs, true_t.T, '-')
+            plt.plot(xs, ml_t.T, '-^')
+            plt.legend(["rho", "u", "p"])
+
+            statefig_t1 = plt.figure()
+            plt.plot(xs, true_t1.T, '-')
+            plt.plot(xs, ml_t1.T, '-s')
+            plt.legend(["rho", "u", "p"])
+
+            statefig_f = plt.figure()
+            plt.plot(xs, true_f.T, '-')
+            plt.plot(xs, ml_f.T, '-*')
+            plt.legend(["rho", "u", "p"])
+
             wandb.log({
                 "Train loss": float(loss),
-                "Test Error": float(err),
+                "Error 100": float(err_arr[0]),
+                "Error 150": float(err_arr[1]),
+                "Error 200": float(err_arr[2]),
                 "Epoch": float(epoch),
-                "Error History Table": wandb.Table(data=err_hist_df),
-                "Final State Table": wandb.Table(data=state_f_df),
-                # "Weight Matrix": wandb.Image(weight_arr, caption='Kernel Weights'),
+                "Error Plot": errfig,
+                "State 100": statefig_t,
+                "State 150": statefig_t1,
+                "State 200": statefig_f,
             })
 
         # if epoch % 50 == 0:  # Clear every x epochs
@@ -561,7 +582,7 @@ def visualize():
 # %% main
 if __name__ == "__main__":
     # data input will be primes(t)
-    u_init = jnp.zeros((5, setup.nx, 1, 1))
+    u_init = jnp.zeros((5, setup.nx+2, 1))
     initial_params = net.init(jrand.PRNGKey(1), u_init)
     del u_init
     if setup.load_warm or setup.load_last:
