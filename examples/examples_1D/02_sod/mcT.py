@@ -180,10 +180,11 @@ def evaluate(params: hk.Params, data: jnp.ndarray) -> float:
     err_hist = jnp.array(vmap(mse, in_axes=(2, 2))(
         ml_pred_arr[:, [0, 1, 4], ...], data[:, 0:3, 1:, ...]))
     # err = mse(ml_pred_arr[:, [0, 1, 4], ...], data[:, 0:3, 1:, ...])
-    err = jnp.cumsum(err_hist)[[100, 150, 200]]
-    ml_t = jnp.reshape(ml_pred_arr[0, [0, 1, 4], 100], (3, 100))
-    ml_t1 = jnp.reshape(ml_pred_arr[0, [0, 1, 4], 150], (3, 100))
-    ml_f = jnp.reshape(ml_pred_arr[0, [0, 1, 4], 200], (3, 100))
+    err = jnp.cumsum(err_hist)
+    err = err[99::50]
+    ml_t = jnp.reshape(ml_pred_arr[0, [0, 1, 4], 99], (3, 100))
+    ml_t1 = jnp.reshape(ml_pred_arr[0, [0, 1, 4], 149], (3, 100))
+    ml_f = jnp.reshape(ml_pred_arr[0, [0, 1, 4], 199], (3, 100))
     return err, err_hist, ml_t, ml_t1,  ml_f
 
 
@@ -384,12 +385,12 @@ def Train(params, opt_state, data_test: np.ndarray, data_train: np.ndarray) -> h
     epoch_min = -1*jnp.ones(3)
 
     for epoch in range(setup.num_epochs):
-        t0 = time.time()
+        # t0 = time.time()
         params, opt_state, loss = update(params, opt_state, train_seq)
-        t1 = time.time()
+        # t1 = time.time()
         err_arr, err_hist, ml_t, ml_t1, ml_f = evaluate(params, test_coarse)
         # err = mldb_err(params,train_seq)
-        t2 = time.time()
+        # t2 = time.time()
 
         # print("Update time: {:.2e}".format(t1-t0),
         #       "Eval time: {:.2e}".format(t2-t1))
@@ -398,8 +399,8 @@ def Train(params, opt_state, data_test: np.ndarray, data_train: np.ndarray) -> h
 
         for i in range(3):
             if err_arr[i] <= min_err[i]:
-                min_err[i] = err_arr[i]
-                epoch_min[i] = epoch
+                min_err= min_err.at[i].set(err_arr[i])
+                epoch_min = epoch_min.at[i].set(epoch)
                 path = os.path.join(
                     param_path, 'best_t{}.pkl'.format(test_times[i]))
                 if os.path.exists(path):
@@ -414,18 +415,21 @@ def Train(params, opt_state, data_test: np.ndarray, data_train: np.ndarray) -> h
 
             statefig_t = plt.figure()
             plt.plot(xs, true_t.T, '-')
-            plt.plot(xs, ml_t.T, '-^')
-            plt.legend(["rho", "u", "p"])
+            plt.plot(xs, ml_t.T, '--')
+            plt.legend(["True rho", "True u", "True p",
+                        "MCT rho", "MCT u", "MCT p"])
 
             statefig_t1 = plt.figure()
             plt.plot(xs, true_t1.T, '-')
-            plt.plot(xs, ml_t1.T, '-s')
-            plt.legend(["rho", "u", "p"])
+            plt.plot(xs, ml_t1.T, '--')
+            plt.legend(["True rho", "True u", "True p",
+                        "MCT rho", "MCT u", "MCT p"])
 
             statefig_f = plt.figure()
             plt.plot(xs, true_f.T, '-')
-            plt.plot(xs, ml_f.T, '-*')
-            plt.legend(["rho", "u", "p"])
+            plt.plot(xs, ml_f.T, '--')
+            plt.legend(["True rho", "True u", "True p",
+                        "MCT rho", "MCT u", "MCT p"])
 
             wandb.log({
                 "Train loss": float(loss),

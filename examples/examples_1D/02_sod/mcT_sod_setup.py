@@ -71,9 +71,9 @@ ns = 1
 nr = 1 if mc_flag else 0
 
 # sample set size
-num_train = 1
-num_test = 1
-test_ratio = 1
+num_train = 10
+num_test = 10
+test_ratio = 2
 batch_size = 3
 batch_size = min(batch_size, num_train) if num_train > 0 else batch_size
 num_batches = int(np.ceil(num_train/batch_size))
