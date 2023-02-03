@@ -423,14 +423,14 @@ class SimulationManagerMCT:
             """mcTangent Forward Pass"""
             params = params['MCTANGENT']
             net = net['MCTANGENT']
-
             primes_real = primes[:, 4:104]
-            primes_in = jnp.reshape(primes, (5,108,1))
+            primes_in = jnp.pad(jnp.reshape(
+                primes_real, (5, 100, 1)), ((0, 0), (1, 1), (0, 0)), mode="edge")
             tangent = net.apply(params, primes_in)
             tangent = jnp.reshape(tangent, primes_real.shape)
-
             primes = self.time_integrator.integrate(
                 primes, tangent, timestep_size, stage)
+            # make realistic
             cons = get_conservatives_from_primitives(
                 primes, self.material_manager)
             return primes, cons

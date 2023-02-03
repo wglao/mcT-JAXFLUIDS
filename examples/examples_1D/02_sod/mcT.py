@@ -162,7 +162,7 @@ def evaluate(params: hk.Params, data: jnp.ndarray) -> float:
     ml_pred_arr = jnp.moveaxis(ml_pred_arr, 0, 2)
 
     ml_true = jnp.concatenate((data[:, 0:2, 1:, ...], jnp.zeros_like(
-        data[:, 0:2, 1:, ...]), jnp.expand_dims(data[:, 2, 1:, ...], 1)))
+        data[:, 0:2, 1:, ...]), jnp.expand_dims(data[:, 2, 1:, ...], 1)), axis=1)
     err_hist = jnp.array(vmap(mse, in_axes=(2, 2))(
         ml_pred_arr, ml_true))
     err = jnp.cumsum(err_hist)
@@ -215,43 +215,43 @@ def get_loss_batch(params: hk.Params, batch: jnp.ndarray) -> float:
     ml_loss_batch = mse(
         ml_pred_arr[:, :, :setup.ns+1], ml_true)
 
-    # return ml_loss_batch
-    if not setup.mc_flag or setup.nr < 1:
-        return ml_loss_batch
+    return ml_loss_batch
+    # if not setup.mc_flag or setup.nr < 1:
+    #     return ml_loss_batch
 
-    # mc loss
+    # # mc loss
 
-    # resequence for each R seq
-    ml_pred_arr = jnp.swapaxes(ml_pred_arr, 1, 2)
-    ml_rseqs = jnp.concatenate(vmap(get_rseqs, in_axes=(0,))(ml_pred_arr))
+    # # resequence for each R seq
+    # ml_pred_arr = jnp.swapaxes(ml_pred_arr, 1, 2)
+    # ml_rseqs = jnp.concatenate(vmap(get_rseqs, in_axes=(0,))(ml_pred_arr))
 
-    # concatenate predictions up to S+1 as initial condition for mc loss
-    mc_primes_init = jnp.reshape(
-        ml_primes_init,
-        (setup.batch_size*(setup.nt-setup.ns-1), 1, 5, setup.nx, setup.ny, setup.nz)
-    )
-    mc_primes_init = jnp.concatenate(
-        jnp.concatenate(
-            (mc_primes_init, ml_pred_arr[:, :setup.ns+1]),
-            axis=1
-        )
-    )
+    # # concatenate predictions up to S+1 as initial condition for mc loss
+    # mc_primes_init = jnp.reshape(
+    #     ml_primes_init,
+    #     (setup.batch_size*(setup.nt-setup.ns-1), 1, 5, setup.nx, setup.ny, setup.nz)
+    # )
+    # mc_primes_init = jnp.concatenate(
+    #     jnp.concatenate(
+    #         (mc_primes_init, ml_pred_arr[:, :setup.ns+1]),
+    #         axis=1
+    #     )
+    # )
 
-    mc_pred_arr, _ = sim_manager_def.feed_forward(
-        mc_primes_init,
-        None,  # not needed for single-phase, but is a required arg for feed_forward
-        setup.nr,
-        ml_parameters_dict,
-        ml_networks_dict
-    )
-    mc_pred_arr = jnp.array(mc_pred_arr[1:])
-    mc_pred_arr = jnp.moveaxis(mc_pred_arr, 0, 1)
+    # mc_pred_arr, _ = sim_manager_def.feed_forward(
+    #     mc_primes_init,
+    #     None,  # not needed for single-phase, but is a required arg for feed_forward
+    #     setup.nr,
+    #     ml_parameters_dict,
+    #     ml_networks_dict
+    # )
+    # mc_pred_arr = jnp.array(mc_pred_arr[1:])
+    # mc_pred_arr = jnp.moveaxis(mc_pred_arr, 0, 1)
 
-    # mc loss with rho only
-    mc_loss_batch = setup.mc_alpha/setup.nr * mse(ml_rseqs, mc_pred_arr)
-    loss_batch = ml_loss_batch + mc_loss_batch
+    # # mc loss with rho only
+    # mc_loss_batch = setup.mc_alpha/setup.nr * mse(ml_rseqs, mc_pred_arr)
+    # loss_batch = ml_loss_batch + mc_loss_batch
 
-    return loss_batch
+    # return loss_batch
 
 
 def update_scan(carry, x):
@@ -429,6 +429,7 @@ def Train(params, opt_state, data_test: np.ndarray, data_train: np.ndarray) -> h
                 "State 150": statefig_t1,
                 "State 200": statefig_f,
             })
+            plt.close('all')
 
         # if epoch % 50 == 0:  # Clear every x epochs
         #     jax.clear_backends()
