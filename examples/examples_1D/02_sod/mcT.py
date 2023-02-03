@@ -31,22 +31,7 @@ import mcT_sod_setup as setup
 import mcT_data as dat
 
 """
-Train mcTangent to solve linear advection using JAX-Fluids
-Run JAX-Fluids to train mcTangent:
-    for sample in batch:
-        1) Run fine-meshed case, sample every 10 dt_fine (dt_coarse = 10*dt_fine)
-        2) for sequence in sample:
-            2a) Coarse-grain result by factor of 4
-            2b) for step in ns:
-                2b2) Step forward coarse case with mcTangent
-                2b1) Step forward coarse case with simpler Riemann Solver
-                2b3) mse(2b1, 2b2) to get mc loss
-                2b4) mse(1b, 2b1) to get ml loss
-                2b5) get total loss = loss_ml + mc_alpha*loss_mc
-    3) loss = mean(all losses)
-    4) update params
-Evaluate against validation set to get error
-Visualize results
+Train mcTangent to solve sod shock tube using JAX-Fluids
 """
 results_path = setup.proj('results')
 test_path = setup.proj('test')

@@ -22,12 +22,12 @@ import mcTangent as mct
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 # os.environ["XLA_FLAGS"] = "--xla_dump_to=/tmp/foo"
-config.update("jax_debug_nans", True)
+config.update("jax_debug_nans", False)
 config.update("jax_disable_jit", False)
 config.update("jax_enable_x64", False)
 
 """parameters for initializing mcTangent"""
-os.environ["PROJ"] = '/home/wglao/Documents/PHO-ICES/mcT-JAXFLUIDS/examples/examples_1D/02_sod'
+os.environ["PROJ"] = '/work/07169/wgl/ls6/PHO-ICES/mcT-JAXFLUIDS/examples/examples_1D/02_sod'
 proj = functools.partial(os.path.join, os.environ["PROJ"])
 src = functools.partial(os.path.join, os.environ["PROJ"])
 save_path = proj('data')
@@ -98,21 +98,20 @@ class mcT_net(hk.Module):
         out = forward(input)
         return out
 
+
+filters = 16
+
 class mcT_2D(hk.Module):
     def __init__(self):
         super(mcT_2D,self).__init__()
         
     def __call__(self, input:jnp.ndarray) -> jnp.ndarray:
-        # forward = hk.Sequential([
-        #     hk.Conv2D(32,(5,2),padding="VALID"),
-        #     jax.nn.relu,
-        #     hk.Conv2D(5,(32,2),padding="VALID")
-        # ])
-        out = hk.Conv2D(32,(5,2),padding="VALID")(input)
-        out = jnp.swapaxes(out, -1, 0)
+        out = hk.Conv2D(filters,(5,2),padding="VALID")(input)
+        out = jnp.swapaxes(out, 0, -1)
+        out = hk.Linear(nx+1)(out)
         out = jax.nn.relu(out)
-        out = hk.Conv2D(5,(32,2),padding="VALID")(out)
-        out = jnp.swapaxes(out, -1, 0)
+        out = hk.Conv2D(5,(filters,2),padding="VALID")(out)
+        out = jnp.swapaxes(out, 0, -1)
 
         return out
 
