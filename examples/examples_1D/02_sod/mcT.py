@@ -56,7 +56,6 @@ def get_coarse(data_fine: jnp.ndarray) -> jnp.ndarray:
     return data_coarse
 
 
-@partial(jit, static_argnums=[0])
 def _add_noise(noise_level: float, arr: jnp.ndarray, seed: int):
     noise_arr = jrand.normal(jrand.PRNGKey(seed), arr.shape)
     noise_arr *= noise_level/jnp.max(noise_arr)
@@ -67,7 +66,6 @@ def _partial_add_noise(arr: jnp.ndarray, seed: int):
     return partial(_add_noise, setup.noise_level)(arr, seed)
 
 
-@jit
 def add_noise(data: jnp.ndarray, seed: Optional[int] = 1):
     seed_arr = jrand.randint(jrand.PRNGKey(seed), (5,), 1, 100)
     data_noisy = vmap(_partial_add_noise, in_axes=(0, 0))(data, seed_arr)
@@ -279,7 +277,7 @@ def update_for(i, args):
     return params, opt_state, data, loss + loss_new/setup.num_batches
 
 
-@ jit
+@jit
 def update(params: Iterable[hk.Params], opt_state: Iterable[optax.OptState], data: jnp.ndarray) -> Tuple:
     """
     Evaluates network loss and gradients
@@ -328,7 +326,7 @@ def mldb_scan(carry, x):
     return (params, data), loss
 
 
-@ jit
+@jit
 def mldb_err(params, data):
     (params, data), loss_arr = lax.scan(
         mldb_scan, (params, data), jnp.arange(setup.num_batches), unroll=setup.num_batches
