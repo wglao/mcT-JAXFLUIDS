@@ -52,7 +52,7 @@ def get_coarse(data_fine: jnp.ndarray) -> jnp.ndarray:
     :return data_coarse: downsampled data array, of shape [times, cxs(, cyz, czs)]
     """
     data_coarse = jim.resize(
-        data_fine, (data_fine.shape[0], setup.nx, 1, 1), "linear")
+        data_fine, (data_fine.shape[0], setup.nx, 1, 1), "nearest")
     return data_coarse
 
 
