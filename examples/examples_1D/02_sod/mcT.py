@@ -162,9 +162,9 @@ def evaluate(params: hk.Params, data: jnp.ndarray) -> float:
     ml_pred_arr = jnp.array(ml_pred_arr[1:])
     ml_pred_arr = jnp.moveaxis(ml_pred_arr, 0, 2)
 
+    ml_true = jnp.concatenate((data[:, 0:2, 1:, ...], jnp.zeros_like(data[:, 0:2, 1:, ...]), jnp.expand_dims(data[:, 2, 1:, ...],1))))
     err_hist = jnp.array(vmap(mse, in_axes=(2, 2))(
-        ml_pred_arr[:, [0, 1, 4], ...], data[:, 0:3, 1:, ...]))
-    # err = mse(ml_pred_arr[:, [0, 1, 4], ...], data[:, 0:3, 1:, ...])
+        ml_pred_arr, ml_true))
     err = jnp.cumsum(err_hist)
     err = err[99::50]
     ml_t = jnp.reshape(ml_pred_arr[0, [0, 1, 4], 99], (3, 100))
@@ -210,8 +210,9 @@ def get_loss_batch(params: hk.Params, batch: jnp.ndarray) -> float:
 
     ml_pred_arr = jnp.array(ml_pred_arr[1:])
     ml_pred_arr = jnp.moveaxis(ml_pred_arr, 0, 2)
+    ml_true = jnp.concatenate((sample[:, 0:2, 1:],jnp.zeros_like(sample[:, 0:2, 1:]),sample[:, 2, 1:]),axis=1)
     ml_loss_batch = mse(
-        ml_pred_arr[:, [0, 1, 4], :setup.ns+1], sample[:, 0:3, 1:])
+        ml_pred_arr[:, :, :setup.ns+1], ml_true)
 
     # return ml_loss_batch
     if not setup.mc_flag or setup.nr < 1:
@@ -571,7 +572,7 @@ def visualize():
 # %% main
 if __name__ == "__main__":
     # data input will be primes(t)
-    u_init = jnp.zeros((5, setup.nx+2, 1))
+    u_init = jnp.zeros((5, setup.nx+8, 1))
     initial_params = net.init(jrand.PRNGKey(1), u_init)
     del u_init
     if setup.load_warm or setup.load_last:
