@@ -117,7 +117,7 @@ class mcT_2D(hk.Module):
         out = hk.Conv2D(5,(5,7),padding="VALID")(out)
         out = jnp.swapaxes(out, 0, -1)
         # [out] = [filters, nx, 1]
-
+        import pdb; pdb.set_trace()
         return out
 
 def net_fn(u):

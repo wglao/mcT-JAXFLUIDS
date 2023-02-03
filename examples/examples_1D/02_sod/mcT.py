@@ -12,7 +12,6 @@ import numpy as np
 import re
 import matplotlib.pyplot as plt
 import json
-import memray as mra
 
 import jax
 import jax.numpy as jnp
@@ -162,7 +161,8 @@ def evaluate(params: hk.Params, data: jnp.ndarray) -> float:
     ml_pred_arr = jnp.array(ml_pred_arr[1:])
     ml_pred_arr = jnp.moveaxis(ml_pred_arr, 0, 2)
 
-    ml_true = jnp.concatenate((data[:, 0:2, 1:, ...], jnp.zeros_like(data[:, 0:2, 1:, ...]), jnp.expand_dims(data[:, 2, 1:, ...],1))))
+    ml_true = jnp.concatenate((data[:, 0:2, 1:, ...], jnp.zeros_like(
+        data[:, 0:2, 1:, ...]), jnp.expand_dims(data[:, 2, 1:, ...], 1)))
     err_hist = jnp.array(vmap(mse, in_axes=(2, 2))(
         ml_pred_arr, ml_true))
     err = jnp.cumsum(err_hist)
@@ -210,7 +210,8 @@ def get_loss_batch(params: hk.Params, batch: jnp.ndarray) -> float:
 
     ml_pred_arr = jnp.array(ml_pred_arr[1:])
     ml_pred_arr = jnp.moveaxis(ml_pred_arr, 0, 2)
-    ml_true = jnp.concatenate((sample[:, 0:2, 1:],jnp.zeros_like(sample[:, 0:2, 1:]),sample[:, 2, 1:]),axis=1)
+    ml_true = jnp.concatenate((sample[:, 0:2, 1:], jnp.zeros_like(
+        sample[:, 0:2, 1:]), jnp.expand_dims(sample[:, 2, 1:], 1)), axis=1)
     ml_loss_batch = mse(
         ml_pred_arr[:, :, :setup.ns+1], ml_true)
 
@@ -278,7 +279,7 @@ def update_for(i, args):
     return params, opt_state, data, loss + loss_new/setup.num_batches
 
 
-@jit
+@ jit
 def update(params: Iterable[hk.Params], opt_state: Iterable[optax.OptState], data: jnp.ndarray) -> Tuple:
     """
     Evaluates network loss and gradients
@@ -327,7 +328,7 @@ def mldb_scan(carry, x):
     return (params, data), loss
 
 
-@jit
+@ jit
 def mldb_err(params, data):
     (params, data), loss_arr = lax.scan(
         mldb_scan, (params, data), jnp.arange(setup.num_batches), unroll=setup.num_batches
@@ -385,7 +386,7 @@ def Train(params, opt_state, data_test: np.ndarray, data_train: np.ndarray) -> h
 
         for i in range(3):
             if err_arr[i] <= min_err[i]:
-                min_err= min_err.at[i].set(err_arr[i])
+                min_err = min_err.at[i].set(err_arr[i])
                 epoch_min = epoch_min.at[i].set(epoch)
                 path = os.path.join(
                     param_path, 'best_t{}.pkl'.format(test_times[i]))
