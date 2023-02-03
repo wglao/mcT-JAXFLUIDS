@@ -30,3 +30,4 @@ Network
 figs
 *.ipynb
 .ipynb_checkpoints
+pip-wheel-metadata
