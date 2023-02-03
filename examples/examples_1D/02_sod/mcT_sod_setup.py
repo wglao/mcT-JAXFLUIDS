@@ -106,18 +106,11 @@ class mcT_2D(hk.Module):
         super(mcT_2D,self).__init__()
         
     def __call__(self, input:jnp.ndarray) -> jnp.ndarray:
-        # [in] = [5,nx+8]
         out = hk.Conv2D(filters,(5,2),padding="VALID")(input)
         out = jnp.swapaxes(out, 0, -1)
-        # [out] = [filters, nx+7, 1]
+        out = jax.nn.relu(out)
         out = hk.Conv2D(5,(filters,2),padding="VALID")(out)
         out = jnp.swapaxes(out, 0, -1)
-        out = jax.nn.relu(out)
-        # [out] = [filters, nx+6, 1]
-        out = hk.Conv2D(5,(5,7),padding="VALID")(out)
-        out = jnp.swapaxes(out, 0, -1)
-        # [out] = [filters, nx, 1]
-        import pdb; pdb.set_trace()
         return out
 
 def net_fn(u):
