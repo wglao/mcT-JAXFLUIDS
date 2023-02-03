@@ -28,7 +28,6 @@ from jaxfluids.post_process import load_data
 
 import mcT_sod_setup as setup
 import mcT_data as dat
-import mcTangent.forward_pass as fwd
 
 """
 Train mcTangent to solve sod shock tube using JAX-Fluids
