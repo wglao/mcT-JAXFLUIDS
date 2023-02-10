@@ -127,6 +127,23 @@ input_reader = InputReader(case_dict, numerical.copy())
 sim_manager_def = SimulationManagerMCT(input_reader)
 
 
+def integrate_scan(carry, x):
+    params, u, dt = carry
+    u_in = jnp.pad(jnp.reshape(
+        u, (*u.shape[0:2], 1)), ((0, 0), (1, 1), (0, 0)), 'edge')
+    du = net.apply(params, u_in)
+    du = jnp.reshape(du, u.shape)
+    u += du*dt
+    return (params, u, dt), u
+
+
+def euler(params, u, dt, s):
+    _, trajectory = lax.scan(
+        integrate_scan, (params, u, dt),
+        jnp.arange(s), unroll=s)
+    return trajectory
+
+
 @jit
 def evaluate(params: hk.Params, data: jnp.ndarray) -> float:
     """
@@ -148,16 +165,19 @@ def evaluate(params: hk.Params, data: jnp.ndarray) -> float:
         (setup.num_test, 5, setup.nx, setup.ny, setup.nz))
     ml_primes_init = ml_primes_init.at[:, [0, 4]].set(data[:, [0, 2], 0])
 
-    ml_pred_arr, _ = sim_manager_mct.feed_forward(
-        ml_primes_init,
-        None,  # not needed for single-phase, but is a required arg for feed_forward
-        setup.nt*setup.test_ratio,
-        ml_parameters_dict,
-        ml_networks_dict
-    )
+    # ml_pred_arr, _ = sim_manager_mct.feed_forward(
+    #     ml_primes_init,
+    #     None,  # not needed for single-phase, but is a required arg for feed_forward
+    #     setup.nt*setup.test_ratio,
+    #     ml_parameters_dict,
+    #     ml_networks_dict
+    # )
+    # ml_pred_arr = jnp.array(ml_pred_arr[1:])
+    # ml_pred_arr = jnp.moveaxis(ml_pred_arr, 0, 2)
 
-    ml_pred_arr = jnp.array(ml_pred_arr[1:])
-    ml_pred_arr = jnp.moveaxis(ml_pred_arr, 0, 2)
+    ml_pred_arr = vmap(euler, in_axes=(None, 0, None, None))(
+        params, ml_primes_init, setup.dt, setup.nt*setup.test_ratio)
+    ml_pred_arr = jnp.moveaxis(ml_pred_arr, 1, 2)
 
     ml_true = jnp.concatenate((data[:, 0:2, 1:, ...], jnp.zeros_like(
         data[:, 0:2, 1:, ...]), jnp.expand_dims(data[:, 2, 1:, ...], 1)), axis=1)
@@ -165,10 +185,11 @@ def evaluate(params: hk.Params, data: jnp.ndarray) -> float:
         ml_pred_arr, ml_true))
     err = jnp.cumsum(err_hist)
     err = err[99::50]
-    ml_t = jnp.reshape(ml_pred_arr[0, [0, 1, 4], 99], (3, 100))
-    ml_t1 = jnp.reshape(ml_pred_arr[0, [0, 1, 4], 149], (3, 100))
+    ml_t = jnp.reshape(ml_pred_arr[0, [0, 1, 4], setup.ns+setup.nr], (3, 100))
+    ml_t1 = jnp.reshape(ml_pred_arr[0, [0, 1, 4], 99], (3, 100))
+    ml_t2 = jnp.reshape(ml_pred_arr[0, [0, 1, 4], 149], (3, 100))
     ml_f = jnp.reshape(ml_pred_arr[0, [0, 1, 4], 199], (3, 100))
-    return err, err_hist, ml_t, ml_t1,  ml_f
+    return err, err_hist, ml_t, ml_t1, ml_t2, ml_f
 
 
 # @jit
@@ -198,16 +219,20 @@ def get_loss_batch(params: hk.Params, batch: jnp.ndarray) -> float:
     if setup.noise_flag:
         ml_primes_init = vmap(add_noise, in_axes=(0, None))(ml_primes_init, 1)
 
-    ml_pred_arr, _ = sim_manager_mct.feed_forward(
-        ml_primes_init,
-        None,  # not needed for single-phase, but is a required arg for feed_forward
-        setup.ns+1+setup.nr,  # nr = 0 if ml only
-        ml_parameters_dict,
-        ml_networks_dict
-    )
+    # ml_pred_arr, _ = sim_manager_mct.feed_forward(
+    #     ml_primes_init,
+    #     None,  # not needed for single-phase, but is a required arg for feed_forward
+    #     setup.ns+1+setup.nr,  # nr = 0 if ml only
+    #     ml_parameters_dict,
+    #     ml_networks_dict
+    # )
 
-    ml_pred_arr = jnp.array(ml_pred_arr[1:])
-    ml_pred_arr = jnp.moveaxis(ml_pred_arr, 0, 2)
+    ml_pred_arr = vmap(euler, in_axes=(None, 0, None, None))(
+        params, ml_primes_init, setup.dt, setup.ns+1+setup.nr)
+    ml_pred_arr = jnp.moveaxis(ml_pred_arr, 1, 2)
+
+    # ml_pred_arr = jnp.array(ml_pred_arr[:,:,1:])
+    # ml_pred_arr = jnp.moveaxis(ml_pred_arr, 0, 2)
     ml_true = jnp.concatenate((sample[:, 0:2, 1:], jnp.zeros_like(
         sample[:, 0:2, 1:]), jnp.expand_dims(sample[:, 2, 1:], 1)), axis=1)
     ml_loss_batch = mse(
@@ -362,8 +387,9 @@ def Train(params, opt_state, data_test: np.ndarray, data_train: np.ndarray) -> h
                          setup.test_ratio, setup.nt*setup.test_ratio)
     xs = jnp.linspace(0, setup.x_max, setup.nx)
 
-    true_t = jnp.reshape(test_coarse[0, 0:3, 100], (3, 100))
-    true_t1 = jnp.reshape(test_coarse[0, 0:3, 150], (3, 100))
+    true_t = jnp.reshape(test_coarse[0, 0:3, setup.ns+1+setup.nr], (3, 100))
+    true_t1 = jnp.reshape(test_coarse[0, 0:3, 100], (3, 100))
+    true_t2 = jnp.reshape(test_coarse[0, 0:3, 150], (3, 100))
     true_f = jnp.reshape(test_coarse[0, 0:3, 200], (3, 100))
 
     min_err = sys.float_info.max*jnp.ones(3)
@@ -373,7 +399,7 @@ def Train(params, opt_state, data_test: np.ndarray, data_train: np.ndarray) -> h
         # t0 = time.time()
         params, opt_state, loss = update(params, opt_state, train_seq)
         # t1 = time.time()
-        err_arr, err_hist, ml_t, ml_t1, ml_f = evaluate(params, test_coarse)
+        err_arr, err_hist, ml_t, ml_t1, ml_t2, ml_f = evaluate(params, test_coarse)
         # err = mldb_err(params,train_seq)
         # t2 = time.time()
 
@@ -387,7 +413,8 @@ def Train(params, opt_state, data_test: np.ndarray, data_train: np.ndarray) -> h
                 min_err = min_err.at[i].set(err_arr[i])
                 epoch_min = epoch_min.at[i].set(epoch)
                 path = os.path.join(
-                    param_path, 'best_t{}.pkl'.format(test_times[i]))
+                    param_path, 'best_t{}_{}ch_{}s-{}r.pkl'.format(
+                        test_times[i], setup.filters, setup.ns, setup.nr))
                 if os.path.exists(path):
                     os.remove(path)
                 save_params(params, path)
@@ -410,6 +437,12 @@ def Train(params, opt_state, data_test: np.ndarray, data_train: np.ndarray) -> h
             plt.legend(["True rho", "True u", "True p",
                         "MCT rho", "MCT u", "MCT p"])
 
+            statefig_t2 = plt.figure()
+            plt.plot(xs, true_t2.T, '-')
+            plt.plot(xs, ml_t2.T, '--')
+            plt.legend(["True rho", "True u", "True p",
+                        "MCT rho", "MCT u", "MCT p"])
+
             statefig_f = plt.figure()
             plt.plot(xs, true_f.T, '-')
             plt.plot(xs, ml_f.T, '--')
@@ -423,8 +456,9 @@ def Train(params, opt_state, data_test: np.ndarray, data_train: np.ndarray) -> h
                 "Error 200": float(err_arr[2]),
                 "Epoch": float(epoch),
                 "Error Plot": errfig,
-                "State 100": statefig_t,
-                "State 150": statefig_t1,
+                "State S+R": statefig_t,
+                "State 100": statefig_t1,
+                "State 150": statefig_t2,
                 "State 200": statefig_f,
             })
             plt.close('all')

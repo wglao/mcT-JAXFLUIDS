@@ -34,8 +34,8 @@ save_path = proj('data')
 parallel_flag = False
 
 # data only = False, False
-mc_flag = True
-noise_flag = True
+mc_flag = False
+noise_flag = False
 
 # use warm params
 load_warm = False
@@ -71,10 +71,10 @@ ns = 1
 nr = 1 if mc_flag else 0
 
 # sample set size
-num_train = 10
-num_test = 10
+num_train = 100
+num_test = 100
 test_ratio = 2
-batch_size = 3
+batch_size = 25
 batch_size = min(batch_size, num_train) if num_train > 0 else batch_size
 num_batches = int(np.ceil(num_train/batch_size))
 
@@ -99,7 +99,7 @@ class mcT_net(hk.Module):
         return out
 
 
-filters = 16
+filters = 128
 
 class mcT_2D(hk.Module):
     def __init__(self):
@@ -406,7 +406,7 @@ if __name__ == "__main__":
     warm_start(warm_epochs)
 else:
     # uploading wandb
-    wandb.init(project="mcT-JAXFLUIDS", name=case_name)
+    wandb.init(project="mcT-JAXFLUIDS", name='test_'+case_name)
     wandb.config.problem = case_name
     wandb.config.mc_alpha = mc_alpha
     wandb.config.learning_rate = learning_rate
