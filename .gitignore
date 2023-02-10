@@ -1,6 +1,7 @@
 __pycache__
 __pycache__/
 data/
+data_analytical/
 next_run.json
 results
 results/

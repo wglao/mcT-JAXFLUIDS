@@ -419,26 +419,48 @@ class SimulationManagerMCT:
 
         # LOOP STAGES
         # @jax.jit
-        def _mcT_true(params, net, cons, primes, current_time_stage, stage):
-            """mcTangent Forward Pass"""
-            params = params['MCTANGENT']
-            net = net['MCTANGENT']
-            primes_real = primes[:, 4:104]
-            primes_in = jnp.pad(jnp.reshape(
-                primes_real, (5, 100, 1)), ((0, 0), (1, 1), (0, 0)), mode="edge")
-            tangent = net.apply(params, primes_in)
-            tangent = jnp.reshape(tangent, primes_real.shape)
-            primes = self.time_integrator.integrate(
-                primes, tangent, timestep_size, stage)
-            # make realistic
-            cons = get_conservatives_from_primitives(
-                primes, self.material_manager)
-            return primes, cons
-        mcT_true = partial(_mcT_true, ml_parameters_dict, ml_networks_dict)
+        # def _mcT_true(params, net, cons, primes, current_time_stage, stage):
+        #     """mcTangent Forward Pass"""
+        #     params = params['MCTANGENT']
+        #     net = net['MCTANGENT']
+        #     primes_real = primes[:, 4:104]
+        #     primes_in = jnp.pad(jnp.reshape(
+        #         primes_real, (5, 100, 1)), ((0, 0), (1, 1), (0, 0)), mode="edge")
+        #     tangent = net.apply(params, primes_in)
+        #     tangent = jnp.reshape(tangent, primes_real.shape)
+        #     primes = self.time_integrator.integrate(
+        #         primes, tangent, timestep_size, stage)
+        #     # make realistic
+        #     cons = get_conservatives_from_primitives(
+        #         primes, self.material_manager)
+        #     return primes, cons
+        # mcT_true = partial(_mcT_true, ml_parameters_dict, ml_networks_dict)
+
+        # # @jax.jit
+        # def _mcT_false(levelset, volume_fraction, apertures, forcings_dictionary, ml_parameters_dict, ml_networks_dict, cons, primes, current_time_stage, stage):
+        #     """default jax fluids solver"""
+        #     rhs_cons, rhs_levelset, residual_interface = self.space_solver.compute_rhs(
+        #         cons, primes, current_time_stage,
+        #         levelset, volume_fraction, apertures,
+        #         forcings_dictionary,
+        #         ml_parameters_dict, ml_networks_dict)
+
+        #     # INTEGRATE
+        #     cons = self.time_integrator.integrate(
+        #         cons, rhs_cons, timestep_size, stage)
+
+        #     # MIXING AND PRIME EXTENSION
+        #     primes = get_primitives_from_conservatives(
+        #         cons, self.material_manager)
+        #     return primes, cons
+        # mcT_false = partial(_mcT_false, levelset, volume_fraction, apertures,
+        #                     forcings_dictionary, ml_parameters_dict, ml_networks_dict)
 
         # @jax.jit
-        def _mcT_false(levelset, volume_fraction, apertures, forcings_dictionary, ml_parameters_dict, ml_networks_dict, cons, primes, current_time_stage, stage):
-            """default jax fluids solver"""
+        def integrate_scan(carry, x):
+            """default jax fluids solver in lax scan for speed"""
+            current_time_stage = current_time + timestep_size * \
+                self.time_integrator.timestep_increment_factor[x]
             rhs_cons, rhs_levelset, residual_interface = self.space_solver.compute_rhs(
                 cons, primes, current_time_stage,
                 levelset, volume_fraction, apertures,
@@ -452,19 +474,6 @@ class SimulationManagerMCT:
             # MIXING AND PRIME EXTENSION
             primes = get_primitives_from_conservatives(
                 cons, self.material_manager)
-            return primes, cons
-        mcT_false = partial(_mcT_false, levelset, volume_fraction, apertures,
-                            forcings_dictionary, ml_parameters_dict, ml_networks_dict)
-
-        # @jax.jit
-        def integrate_scan(carry, x):
-            current_time_stage = current_time + timestep_size * \
-                self.time_integrator.timestep_increment_factor[x]
-            primes, cons = jax.lax.cond(
-                self.numerical_setup['mcTangent'] == 'true',
-                mcT_true, mcT_false,
-                *carry, current_time_stage, x
-            )
             cons, primes = self.boundary_condition.fill_boundary_primes(
                 cons, primes, current_time_stage)
             return (cons, primes), None

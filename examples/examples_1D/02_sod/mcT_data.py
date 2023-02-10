@@ -267,13 +267,15 @@ class Data:
                 ):
                     i += 1
                 path = os.path.join(self.save_path, setup.case_name + str(i) + ".h5")
-                hf = h5py.File(path, "w")
 
                 trajectory = jnp.array(self.jitted_calc(fx0, xs, ts))
                 trajectory = jnp.moveaxis(trajectory, -1, 0)
                 trajectory = jnp.expand_dims(trajectory, (3, 4))
+
+                hf = h5py.File(path, "w")
                 hf.create_dataset("data", data=trajectory)
                 hf.close()
+                
                 print("created {}".format(os.path.splitext(path)[0]))
 
     def _load(self, sim: Sim):
