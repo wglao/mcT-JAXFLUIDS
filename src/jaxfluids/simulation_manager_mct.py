@@ -459,6 +459,9 @@ class SimulationManagerMCT:
         # @jax.jit
         def integrate_scan(carry, x):
             """default jax fluids solver in lax scan for speed"""
+            cons, primes = carry
+            stage = x
+            
             current_time_stage = current_time + timestep_size * \
                 self.time_integrator.timestep_increment_factor[x]
             rhs_cons, rhs_levelset, residual_interface = self.space_solver.compute_rhs(
