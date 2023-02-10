@@ -105,7 +105,7 @@ class Data:
 
     def calc_analytical(
         self, fx0: jnp.ndarray, xs: jnp.ndarray, t: jnp.ndarray
-    ) -> None:
+    ) -> jnp.ndarray:
         """Generate analytical solution for a shock tube.
 
         The solver assumes the same ideal gas on both sides of the discontinuity, with
