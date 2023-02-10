@@ -245,7 +245,7 @@ class Data():
                 trajectory = jnp.array(self.jitted_calc(fx0, xs, ts))
                 trajectory = jnp.moveaxis(trajectory, -1, 0)
                 trajectory = jnp.expand_dims(trajectory, (3, 4))
-                hf.create_dataset(None,data=trajectory)
+                hf.create_dataset('data',data=trajectory)
                 pass
 
     def _load(self, sim: Sim):
