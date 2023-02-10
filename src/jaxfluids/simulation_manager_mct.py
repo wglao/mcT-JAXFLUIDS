@@ -461,7 +461,7 @@ class SimulationManagerMCT:
             """default jax fluids solver in lax scan for speed"""
             cons, primes = carry
             stage = x
-            
+
             current_time_stage = current_time + timestep_size * \
                 self.time_integrator.timestep_increment_factor[x]
             rhs_cons, rhs_levelset, residual_interface = self.space_solver.compute_rhs(
@@ -484,8 +484,7 @@ class SimulationManagerMCT:
         (cons, primes), _ = jax.lax.scan(
             integrate_scan,
             (cons, primes),
-            jnp.arange(self.time_integrator.no_stages),
-            unroll=self.time_integrator.no_stages
+            jnp.arange(self.time_integrator.no_stages)
         )
 
         # for stage in range( self.time_integrator.no_stages ):
