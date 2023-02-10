@@ -246,6 +246,7 @@ class Data():
                 trajectory = jnp.moveaxis(trajectory, -1, 0)
                 trajectory = jnp.expand_dims(trajectory, (3, 4))
                 hf.create_dataset('data',data=trajectory)
+                hf.close()
                 pass
 
     def _load(self, sim: Sim):
