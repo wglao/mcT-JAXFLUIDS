@@ -27,7 +27,7 @@ config.update("jax_disable_jit", False)
 config.update("jax_enable_x64", False)
 
 """parameters for initializing mcTangent"""
-os.environ["PROJ"] = '/work/07169/wgl/ls6/PHO-ICES/mcT-JAXFLUIDS/examples/examples_1D/02_sod'
+# os.environ["PROJ"] = '/work/07169/wgl/ls6/PHO-ICES/mcT-JAXFLUIDS/examples/examples_1D/02_sod'
 proj = functools.partial(os.path.join, os.environ["PROJ"])
 src = functools.partial(os.path.join, os.environ["PROJ"])
 save_path = proj('data')
@@ -67,12 +67,12 @@ integrator = "Euler"
 
 mc_alpha = 1e5 if mc_flag else 0
 noise_level = 0.02 if noise_flag else 0
-ns = 1
+ns = 10
 nr = 1 if mc_flag else 0
 
 # sample set size
-num_train = 100
-num_test = 100
+num_train = 0
+num_test = 500
 test_ratio = 2
 batch_size = 25
 batch_size = min(batch_size, num_train) if num_train > 0 else batch_size
@@ -99,7 +99,7 @@ class mcT_net(hk.Module):
         return out
 
 
-filters = 128
+filters = 64
 
 class mcT_2D(hk.Module):
     def __init__(self):
@@ -108,7 +108,7 @@ class mcT_2D(hk.Module):
     def __call__(self, input:jnp.ndarray) -> jnp.ndarray:
         out = hk.Conv2D(filters,(5,2),padding="VALID")(input)
         out = jnp.swapaxes(out, 0, -1)
-        out = jax.nn.relu(out)
+        # out = jax.nn.relu(out)
         out = hk.Conv2D(5,(filters,2),padding="VALID")(out)
         out = jnp.swapaxes(out, 0, -1)
         return out
